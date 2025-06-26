@@ -1,0 +1,372 @@
+import express from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import mqtt from 'mqtt';
+import ModbusRTU from 'modbus-serial';
+import snmp from 'net-snmp';
+
+const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST"]
+  }
+});
+
+app.use(cors());
+app.use(express.json());
+
+// Gateway state
+let devices = [];
+let settings = {
+  mqtt: {
+    broker: 'localhost',
+    port: 1883,
+    username: '',
+    password: '',
+    topic: 'iot/gateway'
+  },
+  polling: {
+    interval: 5000,
+    timeout: 3000
+  }
+};
+
+let mqttClient = null;
+let devicePollers = new Map();
+let stats = {
+  totalDevices: 0,
+  activeDevices: 0,
+  messagesProcessed: 0,
+  errors: 0
+};
+
+// Initialize MQTT connection
+function initializeMQTT() {
+  try {
+    if (mqttClient) {
+      mqttClient.end();
+    }
+    
+    const mqttUrl = `mqtt://${settings.mqtt.broker}:${settings.mqtt.port}`;
+    const options = {};
+    
+    if (settings.mqtt.username) {
+      options.username = settings.mqtt.username;
+      options.password = settings.mqtt.password;
+    }
+    
+    mqttClient = mqtt.connect(mqttUrl, options);
+    
+    mqttClient.on('connect', () => {
+      console.log('Connected to MQTT broker');
+      addLog('success', 'Connected to MQTT broker', 'System');
+    });
+    
+    mqttClient.on('error', (error) => {
+      console.error('MQTT connection error:', error);
+      addLog('error', `MQTT connection error: ${error.message}`, 'System');
+    });
+  } catch (error) {
+    console.error('Failed to initialize MQTT:', error);
+    addLog('error', `Failed to initialize MQTT: ${error.message}`, 'System');
+  }
+}
+
+// Logging system
+const logs = [];
+function addLog(level, message, device = null) {
+  const log = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    device
+  };
+  logs.unshift(log);
+  if (logs.length > 1000) logs.pop();
+  
+  // Broadcast to connected clients
+  io.emit('newLog', log);
+}
+
+// Modbus TCP handler
+async function readModbusDevice(device) {
+  const client = new ModbusRTU();
+  try {
+    await client.connectTCP(device.host, { port: parseInt(device.port) });
+    client.setID(parseInt(device.deviceId) || 1);
+    
+    const registers = device.registers.split(',').map(r => parseInt(r.trim()));
+    const data = {};
+    
+    for (const register of registers) {
+      try {
+        const result = await client.readHoldingRegisters(register, 1);
+        data[`register_${register}`] = result.data[0];
+      } catch (error) {
+        console.error(`Error reading register ${register}:`, error);
+        data[`register_${register}`] = null;
+      }
+    }
+    
+    client.close();
+    return data;
+  } catch (error) {
+    client.close();
+    throw error;
+  }
+}
+
+// SNMP handler
+async function readSNMPDevice(device) {
+  return new Promise((resolve, reject) => {
+    const session = snmp.createSession(device.host, device.deviceId || 'public');
+    const oids = device.registers.split(',').map(oid => oid.trim());
+    
+    session.get(oids, (error, varbinds) => {
+      if (error) {
+        session.close();
+        reject(error);
+        return;
+      }
+      
+      const data = {};
+      varbinds.forEach((vb, index) => {
+        if (snmp.isVarbindError(vb)) {
+          console.error(snmp.varbindError(vb));
+          data[`oid_${oids[index]}`] = null;
+        } else {
+          data[`oid_${oids[index]}`] = vb.value;
+        }
+      });
+      
+      session.close();
+      resolve(data);
+    });
+  });
+}
+
+// BACnet handler (simplified simulation for now)
+async function readBACnetDevice(device) {
+  return new Promise((resolve, reject) => {
+    try {
+      // Simulate BACnet reading since the package is not available
+      // In production, you would use a proper BACnet library
+      const objectIds = device.registers.split(',').map(id => parseInt(id.trim()));
+      const data = {};
+      
+      // Simulate random sensor data
+      objectIds.forEach(objectId => {
+        data[`object_${objectId}`] = Math.random() * 100; // Random value for demo
+      });
+      
+      // Simulate network delay
+      setTimeout(() => {
+        resolve(data);
+      }, Math.random() * 1000 + 500);
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+// Device polling
+async function pollDevice(device) {
+  try {
+    let data = {};
+    
+    switch (device.protocol) {
+      case 'modbus':
+        data = await readModbusDevice(device);
+        break;
+      case 'snmp':
+        data = await readSNMPDevice(device);
+        break;
+      case 'bacnet':
+        data = await readBACnetDevice(device);
+        break;
+      default:
+        throw new Error(`Unsupported protocol: ${device.protocol}`);
+    }
+    
+    // Update device status
+    device.status = 'online';
+    device.lastUpdated = new Date().toISOString();
+    device.lastData = data;
+    
+    // Publish to MQTT
+    if (mqttClient && mqttClient.connected) {
+      const topic = device.mqttTopic || `${settings.mqtt.topic}/${device.name.replace(/\s+/g, '_')}`;
+      const payload = {
+        deviceId: device.id,
+        deviceName: device.name,
+        protocol: device.protocol,
+        timestamp: device.lastUpdated,
+        data
+      };
+      
+      mqttClient.publish(topic, JSON.stringify(payload));
+      stats.messagesProcessed++;
+    }
+    
+    addLog('info', `Successfully polled device: ${device.name}`, device.name);
+    
+  } catch (error) {
+    device.status = 'error';
+    device.lastError = error.message;
+    device.lastUpdated = new Date().toISOString();
+    stats.errors++;
+    addLog('error', `Failed to poll device ${device.name}: ${error.message}`, device.name);
+  }
+  
+  // Broadcast device update
+  io.emit('deviceUpdate', device);
+}
+
+// Start polling for a device
+function startDevicePolling(device) {
+  stopDevicePolling(device.id);
+  
+  const interval = device.pollInterval || settings.polling.interval;
+  const pollerId = setInterval(() => {
+    pollDevice(device);
+  }, interval);
+  
+  devicePollers.set(device.id, pollerId);
+  
+  // Initial poll after 2 seconds
+  setTimeout(() => pollDevice(device), 2000);
+}
+
+// Stop polling for a device
+function stopDevicePolling(deviceId) {
+  if (devicePollers.has(deviceId)) {
+    clearInterval(devicePollers.get(deviceId));
+    devicePollers.delete(deviceId);
+  }
+}
+
+// Update statistics
+function updateStats() {
+  stats.totalDevices = devices.length;
+  stats.activeDevices = devices.filter(d => d.status === 'online').length;
+  io.emit('statsUpdate', stats);
+}
+
+// Socket.IO handlers
+io.on('connection', (socket) => {
+  console.log('Client connected');
+  addLog('info', 'Web client connected', 'System');
+  
+  // Send current state to new client
+  socket.emit('devicesUpdate', devices);
+  socket.emit('statsUpdate', stats);
+  socket.emit('settingsUpdate', settings);
+  
+  // Send recent logs
+  socket.emit('logsUpdate', logs.slice(0, 100));
+  
+  socket.on('getDevices', () => {
+    socket.emit('devicesUpdate', devices);
+  });
+  
+  socket.on('getSettings', () => {
+    socket.emit('settingsUpdate', settings);
+  });
+  
+  socket.on('addDevice', (device) => {
+    const newDevice = {
+      ...device,
+      id: device.id || Date.now().toString(),
+      status: 'offline',
+      lastUpdated: null,
+      lastError: null,
+      lastData: null
+    };
+    
+    devices.push(newDevice);
+    startDevicePolling(newDevice);
+    updateStats();
+    addLog('info', `Device added: ${newDevice.name}`, newDevice.name);
+    io.emit('devicesUpdate', devices);
+  });
+  
+  socket.on('updateDevice', (updatedDevice) => {
+    const index = devices.findIndex(d => d.id === updatedDevice.id);
+    if (index !== -1) {
+      stopDevicePolling(updatedDevice.id);
+      devices[index] = {
+        ...updatedDevice,
+        status: devices[index].status,
+        lastUpdated: devices[index].lastUpdated,
+        lastError: devices[index].lastError,
+        lastData: devices[index].lastData
+      };
+      startDevicePolling(devices[index]);
+      updateStats();
+      addLog('info', `Device updated: ${updatedDevice.name}`, updatedDevice.name);
+      io.emit('devicesUpdate', devices);
+    }
+  });
+  
+  socket.on('deleteDevice', (deviceId) => {
+    const deviceIndex = devices.findIndex(d => d.id === deviceId);
+    if (deviceIndex !== -1) {
+      const device = devices[deviceIndex];
+      stopDevicePolling(deviceId);
+      devices.splice(deviceIndex, 1);
+      updateStats();
+      addLog('info', `Device deleted: ${device.name}`, device.name);
+      io.emit('devicesUpdate', devices);
+    }
+  });
+  
+  socket.on('updateSettings', (newSettings) => {
+    settings = { ...settings, ...newSettings };
+    initializeMQTT();
+    addLog('info', 'Settings updated', 'System');
+    io.emit('settingsUpdate', settings);
+  });
+  
+  socket.on('disconnect', () => {
+    console.log('Client disconnected');
+    addLog('info', 'Web client disconnected', 'System');
+  });
+});
+
+// Initialize
+initializeMQTT();
+
+// Update stats every 10 seconds
+setInterval(updateStats, 10000);
+
+// Start server
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, () => {
+  console.log(`IoT Protocol Gateway server running on port ${PORT}`);
+  addLog('success', `Gateway server started on port ${PORT}`, 'System');
+});
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log('Shutting down gateway...');
+  
+  // Stop all device pollers
+  devicePollers.forEach((pollerId) => {
+    clearInterval(pollerId);
+  });
+  
+  // Close MQTT connection
+  if (mqttClient) {
+    mqttClient.end();
+  }
+  
+  // Close server
+  server.close(() => {
+    console.log('Gateway server stopped');
+    process.exit(0);
+  });
+});
