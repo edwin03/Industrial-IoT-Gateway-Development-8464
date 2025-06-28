@@ -5,6 +5,7 @@ import cors from 'cors';
 import mqtt from 'mqtt';
 import ModbusRTU from 'modbus-serial';
 import snmp from 'net-snmp';
+import ModbusSlaveServer from './modbusSlaveServer.js';
 
 const app = express();
 const server = createServer(app);
@@ -31,6 +32,12 @@ let settings = {
   polling: {
     interval: 5000,
     timeout: 3000
+  },
+  modbusSlave: {
+    enabled: false,
+    port: 5020,
+    unitId: 1,
+    autoStart: false
   }
 };
 
@@ -42,6 +49,25 @@ let stats = {
   messagesProcessed: 0,
   errors: 0
 };
+
+// Initialize Modbus Slave Server
+const modbusSlaveServer = new ModbusSlaveServer();
+
+// Logging system
+const logs = [];
+function addLog(level, message, device = null) {
+  const log = {
+    timestamp: new Date().toISOString(),
+    level,
+    message,
+    device
+  };
+  logs.unshift(log);
+  if (logs.length > 1000) logs.pop();
+  
+  // Broadcast to connected clients
+  io.emit('newLog', log);
+}
 
 // Initialize MQTT connection
 function initializeMQTT() {
@@ -75,20 +101,20 @@ function initializeMQTT() {
   }
 }
 
-// Logging system
-const logs = [];
-function addLog(level, message, device = null) {
-  const log = {
-    timestamp: new Date().toISOString(),
-    level,
-    message,
-    device
-  };
-  logs.unshift(log);
-  if (logs.length > 1000) logs.pop();
-  
-  // Broadcast to connected clients
-  io.emit('newLog', log);
+// Initialize Modbus Slave Server
+async function initializeModbusSlave() {
+  try {
+    if (settings.modbusSlave.enabled) {
+      await modbusSlaveServer.start(settings.modbusSlave, addLog);
+      // Update register mappings with current device data
+      modbusSlaveServer.updateDeviceData(devices);
+    } else {
+      await modbusSlaveServer.stop();
+    }
+  } catch (error) {
+    console.error('Failed to initialize Modbus slave:', error);
+    addLog('error', `Failed to initialize Modbus slave: ${error.message}`, 'System');
+  }
 }
 
 // Modbus TCP handler
@@ -166,7 +192,6 @@ async function readBACnetDevice(device) {
       setTimeout(() => {
         resolve(data);
       }, Math.random() * 1000 + 500);
-      
     } catch (error) {
       reject(error);
     }
@@ -207,13 +232,16 @@ async function pollDevice(device) {
         timestamp: device.lastUpdated,
         data
       };
-      
       mqttClient.publish(topic, JSON.stringify(payload));
       stats.messagesProcessed++;
     }
     
-    addLog('info', `Successfully polled device: ${device.name}`, device.name);
+    // Update Modbus slave registers if enabled
+    if (settings.modbusSlave.enabled && modbusSlaveServer.isRunning) {
+      modbusSlaveServer.updateDeviceData(devices);
+    }
     
+    addLog('info', `Successfully polled device: ${device.name}`, device.name);
   } catch (error) {
     device.status = 'error';
     device.lastError = error.message;
@@ -277,6 +305,11 @@ io.on('connection', (socket) => {
     socket.emit('settingsUpdate', settings);
   });
   
+  socket.on('getModbusSlaveInfo', () => {
+    const info = modbusSlaveServer.getRegisterMappings();
+    socket.emit('modbusSlaveInfo', info);
+  });
+  
   socket.on('addDevice', (device) => {
     const newDevice = {
       ...device,
@@ -286,7 +319,6 @@ io.on('connection', (socket) => {
       lastError: null,
       lastData: null
     };
-    
     devices.push(newDevice);
     startDevicePolling(newDevice);
     updateStats();
@@ -324,11 +356,24 @@ io.on('connection', (socket) => {
     }
   });
   
-  socket.on('updateSettings', (newSettings) => {
+  socket.on('updateSettings', async (newSettings) => {
+    const oldModbusSlaveEnabled = settings.modbusSlave.enabled;
     settings = { ...settings, ...newSettings };
+    
     initializeMQTT();
+    
+    // Handle Modbus slave server changes
+    if (settings.modbusSlave.enabled !== oldModbusSlaveEnabled || 
+        (settings.modbusSlave.enabled && newSettings.modbusSlave)) {
+      await initializeModbusSlave();
+    }
+    
     addLog('info', 'Settings updated', 'System');
     io.emit('settingsUpdate', settings);
+    
+    // Send updated Modbus slave info
+    const info = modbusSlaveServer.getRegisterMappings();
+    io.emit('modbusSlaveInfo', info);
   });
   
   socket.on('disconnect', () => {
@@ -343,6 +388,16 @@ initializeMQTT();
 // Update stats every 10 seconds
 setInterval(updateStats, 10000);
 
+// Update Modbus slave registers every 30 seconds if enabled
+setInterval(() => {
+  if (settings.modbusSlave.enabled && modbusSlaveServer.isRunning) {
+    modbusSlaveServer.updateDeviceData(devices);
+    // Broadcast updated register info
+    const info = modbusSlaveServer.getRegisterMappings();
+    io.emit('modbusSlaveInfo', info);
+  }
+}, 30000);
+
 // Start server
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
@@ -351,7 +406,7 @@ server.listen(PORT, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('Shutting down gateway...');
   
   // Stop all device pollers
@@ -363,6 +418,9 @@ process.on('SIGINT', () => {
   if (mqttClient) {
     mqttClient.end();
   }
+  
+  // Stop Modbus slave server
+  await modbusSlaveServer.stop();
   
   // Close server
   server.close(() => {

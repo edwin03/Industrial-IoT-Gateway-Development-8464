@@ -1,14 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import { useGateway } from '../context/GatewayContext';
+import ModbusSlaveConfig from '../components/ModbusSlaveConfig';
 
 const { FiSave, FiServer, FiClock } = FiIcons;
 
 function Settings() {
   const { settings, updateSettings } = useGateway();
   const [formData, setFormData] = useState(settings);
+
+  // Get socket from context
+  const [socket, setSocket] = useState(null);
+  
+  useEffect(() => {
+    // Access socket from window or context
+    if (window.socketInstance) {
+      setSocket(window.socketInstance);
+    }
+  }, []);
+
+  useEffect(() => {
+    setFormData(settings);
+  }, [settings]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -24,6 +39,12 @@ function Settings() {
         [field]: value
       }
     }));
+  };
+
+  const handleModbusSlaveUpdate = (modbusSlaveSettings) => {
+    const newSettings = { ...formData, ...modbusSlaveSettings };
+    setFormData(newSettings);
+    updateSettings(newSettings);
   };
 
   return (
@@ -54,40 +75,43 @@ function Settings() {
               </label>
               <input
                 type="text"
-                value={formData.mqtt.broker}
+                value={formData.mqtt?.broker || ''}
                 onChange={(e) => handleChange('mqtt', 'broker', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Port
               </label>
               <input
                 type="number"
-                value={formData.mqtt.port}
+                value={formData.mqtt?.port || 1883}
                 onChange={(e) => handleChange('mqtt', 'port', parseInt(e.target.value))}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Username
               </label>
               <input
                 type="text"
-                value={formData.mqtt.username}
+                value={formData.mqtt?.username || ''}
                 onChange={(e) => handleChange('mqtt', 'username', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Password
               </label>
               <input
                 type="password"
-                value={formData.mqtt.password}
+                value={formData.mqtt?.password || ''}
                 onChange={(e) => handleChange('mqtt', 'password', e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
@@ -100,7 +124,7 @@ function Settings() {
             </label>
             <input
               type="text"
-              value={formData.mqtt.topic}
+              value={formData.mqtt?.topic || ''}
               onChange={(e) => handleChange('mqtt', 'topic', e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
@@ -126,19 +150,20 @@ function Settings() {
               </label>
               <input
                 type="number"
-                value={formData.polling.interval}
+                value={formData.polling?.interval || 5000}
                 onChange={(e) => handleChange('polling', 'interval', parseInt(e.target.value))}
                 min="1000"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Timeout (ms)
               </label>
               <input
                 type="number"
-                value={formData.polling.timeout}
+                value={formData.polling?.timeout || 3000}
                 onChange={(e) => handleChange('polling', 'timeout', parseInt(e.target.value))}
                 min="1000"
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -159,6 +184,13 @@ function Settings() {
           </motion.button>
         </div>
       </form>
+
+      {/* Modbus Slave Configuration */}
+      <ModbusSlaveConfig
+        settings={settings}
+        onUpdateSettings={handleModbusSlaveUpdate}
+        socket={socket}
+      />
     </motion.div>
   );
 }

@@ -17,6 +17,9 @@ function App() {
   useEffect(() => {
     const newSocket = io('http://localhost:3001');
     setSocket(newSocket);
+    
+    // Make socket available globally for components that need it
+    window.socketInstance = newSocket;
 
     newSocket.on('connect', () => {
       setIsConnected(true);
@@ -30,6 +33,7 @@ function App() {
 
     return () => {
       newSocket.close();
+      delete window.socketInstance;
     };
   }, []);
 
@@ -38,12 +42,10 @@ function App() {
       <Router>
         <div className="flex h-screen bg-gray-50 overflow-hidden">
           <Sidebar />
-          
           <main className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 flex flex-col h-full">
               <div className="flex-shrink-0 flex items-center justify-between p-6 bg-white border-b border-gray-200">
                 <h1 className="text-2xl font-bold text-gray-900">IoT Protocol Gateway</h1>
-                
                 <div className="flex items-center space-x-2">
                   <div className={`w-3 h-3 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
                   <span className="text-sm text-gray-600">
@@ -51,7 +53,6 @@ function App() {
                   </span>
                 </div>
               </div>
-
               <div className="flex-1 overflow-y-auto p-6">
                 <AnimatePresence mode="wait">
                   <Routes>
