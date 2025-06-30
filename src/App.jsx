@@ -2,7 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import io from 'socket.io-client';
+
+// Components
 import Sidebar from './components/Sidebar';
+import Login from './components/Login';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Pages
 import Dashboard from './pages/Dashboard';
 import Devices from './pages/Devices';
 import Data from './pages/Data';
@@ -12,8 +18,8 @@ import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import Users from './pages/Users';
 import Profile from './pages/Profile';
-import Login from './components/Login';
-import ProtectedRoute from './components/ProtectedRoute';
+
+// Contexts
 import { GatewayProvider } from './context/GatewayContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
@@ -24,7 +30,14 @@ function AppContent() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      const newSocket = io('http://localhost:3001');
+      // Use environment variable or fallback for socket URL
+      const socketUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3001';
+      const newSocket = io(socketUrl, {
+        transports: ['websocket', 'polling'],
+        timeout: 20000,
+        forceNew: true
+      });
+      
       setSocket(newSocket);
       
       // Make socket available globally for components that need it
@@ -38,6 +51,11 @@ function AppContent() {
       newSocket.on('disconnect', () => {
         setIsConnected(false);
         console.log('Disconnected from gateway server');
+      });
+
+      newSocket.on('connect_error', (error) => {
+        console.warn('Socket connection error:', error);
+        setIsConnected(false);
       });
 
       return () => {

@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 
-const { FiSearch, FiRefreshCw, FiWifi, FiX, FiPlus, FiInfo, FiMapPin, FiHardDrive } = FiIcons;
+const { FiSearch, FiRefreshCw, FiWifi, FiX, FiPlus, FiInfo, FiMapPin, FiHardDrive, FiAlertTriangle } = FiIcons;
 
 function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
   const [scanning, setScanning] = useState(false);
@@ -11,133 +11,113 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
   const [scanProgress, setScanProgress] = useState(0);
   const [selectedNetwork, setSelectedNetwork] = useState('local');
   const [customNetwork, setCustomNetwork] = useState('192.168.1.0/24');
+  const [error, setError] = useState('');
   const [scanSettings, setScanSettings] = useState({
     timeout: 5000,
     maxDevices: 50,
     includeObjects: true
   });
 
-  // Simulated BACnet device discovery
-  const simulatedDevices = [
-    {
-      id: '12345',
-      name: 'HVAC Controller 1',
-      description: 'Main Building HVAC System',
-      address: '192.168.1.100',
-      port: 47808,
-      networkNumber: 0,
-      macAddress: '10:20:30:40:50:01',
-      vendor: 'Honeywell',
-      modelName: 'Excel 5000',
-      firmwareVersion: '2.1.3',
-      applicationSoftwareVersion: '1.5.2',
-      objectList: [
-        { type: 'analog-input', instance: 0, name: 'Zone 1 Temperature', description: 'Zone 1 Room Temperature', units: 'degrees-celsius' },
-        { type: 'analog-input', instance: 1, name: 'Zone 1 Humidity', description: 'Zone 1 Relative Humidity', units: 'percent' },
-        { type: 'analog-output', instance: 0, name: 'Zone 1 Setpoint', description: 'Zone 1 Temperature Setpoint', units: 'degrees-celsius' },
-        { type: 'binary-input', instance: 0, name: 'Zone 1 Occupancy', description: 'Zone 1 Occupancy Sensor', units: 'no-units' },
-        { type: 'binary-output', instance: 0, name: 'Zone 1 Fan', description: 'Zone 1 Fan Control', units: 'no-units' }
-      ]
-    },
-    {
-      id: '23456',
-      name: 'Lighting Controller',
-      description: 'Floor 2 Lighting System',
-      address: '192.168.1.101',
-      port: 47808,
-      networkNumber: 0,
-      macAddress: '10:20:30:40:50:02',
-      vendor: 'Johnson Controls',
-      modelName: 'LightManager Pro',
-      firmwareVersion: '3.2.1',
-      applicationSoftwareVersion: '2.1.0',
-      objectList: [
-        { type: 'binary-output', instance: 0, name: 'Zone A Lights', description: 'Zone A Light Control', units: 'no-units' },
-        { type: 'binary-output', instance: 1, name: 'Zone B Lights', description: 'Zone B Light Control', units: 'no-units' },
-        { type: 'analog-output', instance: 0, name: 'Zone A Dimmer', description: 'Zone A Dimmer Level', units: 'percent' },
-        { type: 'analog-input', instance: 0, name: 'Light Sensor', description: 'Ambient Light Level', units: 'lux' }
-      ]
-    },
-    {
-      id: '34567',
-      name: 'Energy Meter',
-      description: 'Main Electrical Panel Monitor',
-      address: '192.168.1.102',
-      port: 47808,
-      networkNumber: 0,
-      macAddress: '10:20:30:40:50:03',
-      vendor: 'Schneider Electric',
-      modelName: 'PowerLogic PM8000',
-      firmwareVersion: '1.4.2',
-      applicationSoftwareVersion: '4.1.1',
-      objectList: [
-        { type: 'analog-input', instance: 0, name: 'Total Power', description: 'Total Active Power', units: 'kilowatts' },
-        { type: 'analog-input', instance: 1, name: 'Voltage L1', description: 'Line 1 Voltage', units: 'volts' },
-        { type: 'analog-input', instance: 2, name: 'Current L1', description: 'Line 1 Current', units: 'amperes' },
-        { type: 'analog-input', instance: 3, name: 'Power Factor', description: 'Total Power Factor', units: 'no-units' },
-        { type: 'analog-input', instance: 4, name: 'Frequency', description: 'Line Frequency', units: 'hertz' }
-      ]
-    },
-    {
-      id: '45678',
-      name: 'VAV Box Controller',
-      description: 'Variable Air Volume Control',
-      address: '192.168.1.103',
-      port: 47808,
-      networkNumber: 0,
-      macAddress: '10:20:30:40:50:04',
-      vendor: 'Trane',
-      modelName: 'Tracer ZN510',
-      firmwareVersion: '2.3.1',
-      applicationSoftwareVersion: '1.8.3',
-      objectList: [
-        { type: 'analog-input', instance: 0, name: 'Room Temperature', description: 'Zone Temperature', units: 'degrees-celsius' },
-        { type: 'analog-input', instance: 1, name: 'Airflow Rate', description: 'Current Airflow', units: 'cubic-feet-per-minute' },
-        { type: 'analog-output', instance: 0, name: 'Damper Position', description: 'Damper Control Signal', units: 'percent' },
-        { type: 'analog-output', instance: 1, name: 'Reheat Valve', description: 'Reheat Coil Valve Position', units: 'percent' }
-      ]
-    }
-  ];
-
+  // Real BACnet device discovery
   const startDiscovery = async () => {
+    if (!window.socketInstance) {
+      setError('No connection to server. Please check if the server is running.');
+      return;
+    }
+
     setScanning(true);
     setScanProgress(0);
     setDiscoveredDevices([]);
+    setError('');
 
-    // Simulate progressive discovery
-    const totalSteps = 20;
-    for (let i = 0; i <= totalSteps; i++) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-      setScanProgress((i / totalSteps) * 100);
+    try {
+      // Prepare discovery options
+      const discoveryOptions = {
+        networkRange: selectedNetwork === 'custom' ? customNetwork : selectedNetwork,
+        timeout: scanSettings.timeout,
+        maxDevices: scanSettings.maxDevices,
+        includeObjects: scanSettings.includeObjects
+      };
 
-      // Add devices at different progress points
-      if (i === 5) setDiscoveredDevices([simulatedDevices[0]]);
-      if (i === 10) setDiscoveredDevices([...simulatedDevices.slice(0, 2)]);
-      if (i === 15) setDiscoveredDevices([...simulatedDevices.slice(0, 3)]);
-      if (i === 20) setDiscoveredDevices(simulatedDevices);
+      console.log('Starting BACnet discovery with options:', discoveryOptions);
+
+      // Start progress simulation
+      const progressInterval = setInterval(() => {
+        setScanProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return prev;
+          }
+          return prev + 10;
+        });
+      }, scanSettings.timeout / 10);
+
+      // Send discovery request to server
+      window.socketInstance.emit('bacnetDiscover', discoveryOptions);
+
+      // Listen for discovery results
+      const handleDiscoveryResult = (result) => {
+        clearInterval(progressInterval);
+        setScanProgress(100);
+        setScanning(false);
+
+        if (result.success) {
+          console.log('Discovery successful:', result.devices);
+          setDiscoveredDevices(result.devices || []);
+          if (result.devices.length === 0) {
+            setError('No BACnet devices found on the network. Make sure devices are online and accessible.');
+          }
+        } else {
+          console.error('Discovery failed:', result.error);
+          setError(result.error || 'Discovery failed. Please check network settings and try again.');
+        }
+      };
+
+      // Set up one-time listener for the result
+      window.socketInstance.once('bacnetDiscoveryResult', handleDiscoveryResult);
+
+      // Set timeout for discovery
+      setTimeout(() => {
+        clearInterval(progressInterval);
+        if (scanning) {
+          setScanning(false);
+          setScanProgress(100);
+          window.socketInstance.off('bacnetDiscoveryResult', handleDiscoveryResult);
+          if (discoveredDevices.length === 0) {
+            setError('Discovery timeout. No devices responded within the specified time.');
+          }
+        }
+      }, scanSettings.timeout + 2000);
+
+    } catch (error) {
+      setScanning(false);
+      setScanProgress(0);
+      setError('Failed to start discovery: ' + error.message);
+      console.error('Discovery error:', error);
     }
-
-    setScanning(false);
   };
 
   const handleDeviceSelect = (device) => {
     // Create device configuration from discovered device
     const deviceConfig = {
-      name: device.name,
-      description: device.description,
+      name: device.deviceName || device.name,
+      description: device.description || `${device.vendorName} ${device.modelName}`,
       protocol: 'bacnet',
       host: device.address,
       port: device.port.toString(),
-      deviceId: device.id,
-      registers: device.objectList.slice(0, 10).map((obj, index) => index + 1).join(','), // Use first 10 object instances
+      deviceId: device.deviceId,
+      registers: device.objectList ? device.objectList.slice(0, 10).map((obj, index) => index + 1).join(',') : '1,2,3,4,5',
       pollInterval: 10000,
       bacnetConfig: {
-        networkNumber: device.networkNumber,
-        macAddress: device.macAddress,
-        maxApduLength: 1476,
-        segmentationSupported: 'segmented-both',
-        vendorId: device.vendor,
-        objectList: device.objectList
+        networkNumber: device.networkNumber || 0,
+        macAddress: device.macAddress || '',
+        maxApduLength: device.maxApduLength || 1476,
+        segmentationSupported: device.segmentationSupported || 'segmented-both',
+        vendorId: device.vendorName || device.vendorId || '',
+        modelName: device.modelName || '',
+        firmwareRevision: device.firmwareRevision || '',
+        applicationSoftwareVersion: device.applicationSoftwareVersion || '',
+        objectList: device.objectList || []
       }
     };
 
@@ -196,15 +176,27 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
               <SafeIcon icon={FiSearch} className="w-6 h-6 text-primary-600" />
               <h3 className="text-lg font-semibold text-gray-900">BACnet Device Discovery</h3>
             </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600"
-            >
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
               <SafeIcon icon={FiX} className="w-6 h-6" />
             </button>
           </div>
 
           <div className="p-6">
+            {/* Connection Status */}
+            {!window.socketInstance && (
+              <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <SafeIcon icon={FiAlertTriangle} className="w-5 h-5 text-red-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-red-900 mb-2">Server Connection Required</h4>
+                    <p className="text-sm text-red-800">
+                      BACnet discovery requires a connection to the gateway server. Please ensure the server is running and refresh the page.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Discovery Settings */}
             <div className="mb-6">
               <h4 className="text-md font-semibold text-gray-900 mb-4">Discovery Settings</h4>
@@ -218,8 +210,8 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                     onChange={(e) => setSelectedNetwork(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    <option value="local">Local Network</option>
-                    <option value="broadcast">Broadcast (255.255.255.255)</option>
+                    <option value="local">Local Network (Auto)</option>
+                    <option value="broadcast">Global Broadcast</option>
                     <option value="custom">Custom Range</option>
                   </select>
                 </div>
@@ -241,7 +233,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Timeout (ms)
+                    Timeout (seconds)
                   </label>
                   <select
                     value={scanSettings.timeout}
@@ -252,6 +244,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                     <option value={5000}>5 seconds</option>
                     <option value={10000}>10 seconds</option>
                     <option value={15000}>15 seconds</option>
+                    <option value={30000}>30 seconds</option>
                   </select>
                 </div>
 
@@ -290,12 +283,12 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={startDiscovery}
-                  disabled={scanning}
+                  disabled={scanning || !window.socketInstance}
                   className="bg-primary-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <SafeIcon 
-                    icon={scanning ? FiRefreshCw : FiSearch} 
-                    className={`w-4 h-4 ${scanning ? 'animate-spin' : ''}`} 
+                  <SafeIcon
+                    icon={scanning ? FiRefreshCw : FiSearch}
+                    className={`w-4 h-4 ${scanning ? 'animate-spin' : ''}`}
                   />
                   <span>{scanning ? 'Discovering...' : 'Start Discovery'}</span>
                 </motion.button>
@@ -309,7 +302,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                   className="mt-4"
                 >
                   <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
-                    <span>Scanning network...</span>
+                    <span>Scanning network for BACnet devices...</span>
                     <span>{Math.round(scanProgress)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-2">
@@ -319,6 +312,23 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                       className="bg-primary-600 h-2 rounded-full"
                       transition={{ duration: 0.3 }}
                     />
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Error Display */}
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4"
+                >
+                  <div className="flex items-start space-x-3">
+                    <SafeIcon icon={FiAlertTriangle} className="w-5 h-5 text-red-600 mt-0.5" />
+                    <div className="flex-1">
+                      <h4 className="text-sm font-medium text-red-900 mb-1">Discovery Error</h4>
+                      <p className="text-sm text-red-800">{error}</p>
+                    </div>
                   </div>
                 </motion.div>
               )}
@@ -337,7 +347,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                 )}
               </div>
 
-              {discoveredDevices.length === 0 && !scanning ? (
+              {discoveredDevices.length === 0 && !scanning && !error ? (
                 <div className="text-center py-12 text-gray-500">
                   <SafeIcon icon={FiWifi} className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p className="text-lg font-medium mb-2">No devices discovered</p>
@@ -348,7 +358,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                   <AnimatePresence>
                     {discoveredDevices.map((device, index) => (
                       <motion.div
-                        key={device.id}
+                        key={device.deviceId || device.id}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
@@ -359,15 +369,19 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                           <div className="flex-1">
                             <div className="flex items-center space-x-2 mb-1">
                               <SafeIcon icon={FiHardDrive} className="w-4 h-4 text-primary-600" />
-                              <h5 className="font-semibold text-gray-900">{device.name}</h5>
+                              <h5 className="font-semibold text-gray-900">
+                                {device.deviceName || device.name}
+                              </h5>
                             </div>
-                            <p className="text-sm text-gray-600 mb-2">{device.description}</p>
+                            <p className="text-sm text-gray-600 mb-2">
+                              {device.description || `${device.vendorName || ''} ${device.modelName || ''}`.trim()}
+                            </p>
                             <div className="flex items-center space-x-4 text-xs text-gray-500">
                               <span className="flex items-center space-x-1">
                                 <SafeIcon icon={FiMapPin} className="w-3 h-3" />
                                 <span>{device.address}:{device.port}</span>
                               </span>
-                              <span>ID: {device.id}</span>
+                              <span>ID: {device.deviceId}</span>
                             </div>
                           </div>
                           <motion.button
@@ -385,21 +399,27 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
 
                         {/* Device Details */}
                         <div className="space-y-2">
-                          <div className="flex items-center justify-between">
-                            <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getVendorColor(device.vendor)}`}>
-                              {device.vendor}
-                            </span>
-                            <span className="text-xs text-gray-500">{device.modelName}</span>
-                          </div>
+                          {device.vendorName && (
+                            <div className="flex items-center justify-between">
+                              <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getVendorColor(device.vendorName)}`}>
+                                {device.vendorName}
+                              </span>
+                              {device.modelName && (
+                                <span className="text-xs text-gray-500">{device.modelName}</span>
+                              )}
+                            </div>
+                          )}
 
-                          <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
-                            <div>
-                              <span className="font-medium">Firmware:</span> {device.firmwareVersion}
+                          {device.firmwareRevision && device.applicationSoftwareVersion && (
+                            <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                              <div>
+                                <span className="font-medium">Firmware:</span> {device.firmwareRevision}
+                              </div>
+                              <div>
+                                <span className="font-medium">Software:</span> {device.applicationSoftwareVersion}
+                              </div>
                             </div>
-                            <div>
-                              <span className="font-medium">Software:</span> {device.applicationSoftwareVersion}
-                            </div>
-                          </div>
+                          )}
 
                           {/* Object List Preview */}
                           {device.objectList && device.objectList.length > 0 && (
@@ -412,9 +432,13 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                               <div className="space-y-1">
                                 {device.objectList.slice(0, 3).map((obj, objIndex) => (
                                   <div key={objIndex} className="flex items-center space-x-2 text-xs">
-                                    <span>{getObjectTypeIcon(obj.type)}</span>
-                                    <span className="font-medium">{obj.name}</span>
-                                    <span className="text-gray-500">({obj.type})</span>
+                                    <span>{getObjectTypeIcon(obj.objectType || obj.type)}</span>
+                                    <span className="font-medium">
+                                      {obj.objectName || obj.name}
+                                    </span>
+                                    <span className="text-gray-500">
+                                      ({obj.objectType || obj.type})
+                                    </span>
                                   </div>
                                 ))}
                                 {device.objectList.length > 3 && (
@@ -441,10 +465,11 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                   <h5 className="text-sm font-medium text-blue-900 mb-2">BACnet Discovery Tips</h5>
                   <div className="text-sm text-blue-800 space-y-1">
                     <p>• Discovery uses WHO-IS broadcasts to find devices on the network</p>
-                    <p>• Ensure your computer and BACnet devices are on the same network</p>
-                    <p>• Some devices may require specific network configuration</p>
-                    <p>• Discovery timeout affects how long to wait for device responses</p>
-                    <p>• Object list discovery may take longer but provides more detail</p>
+                    <p>• Ensure your computer and BACnet devices are on the same network segment</p>
+                    <p>• Some devices may require specific network configuration or routing</p>
+                    <p>• Increase timeout for slower networks or devices</p>
+                    <p>• Object list discovery provides detailed device information but takes longer</p>
+                    <p>• Check device documentation for BACnet/IP configuration requirements</p>
                   </div>
                 </div>
               </div>

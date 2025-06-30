@@ -1,17 +1,45 @@
 import React from 'react';
-import * as FiIcons from 'react-icons/fi';
-import { FiAlertTriangle } from 'react-icons/fi';
 
 const SafeIcon = ({ icon, name, ...props }) => {
   let IconComponent;
-  
+
   try {
-    IconComponent = icon || (name && FiIcons[`Fi${name}`]);
+    // Handle direct icon component
+    if (icon && typeof icon === 'function') {
+      IconComponent = icon;
+    }
+    // Handle icon name string
+    else if (name && typeof name === 'string') {
+      // Dynamic import would go here, but for safety we'll use a fallback
+      IconComponent = null;
+    }
+    else {
+      IconComponent = null;
+    }
   } catch (e) {
+    console.warn('Icon loading error:', e);
     IconComponent = null;
   }
-  
-  return IconComponent ? React.createElement(IconComponent, props) : <FiAlertTriangle {...props} />;
+
+  // Fallback icon component
+  const FallbackIcon = (props) => (
+    <svg
+      width="1em"
+      height="1em"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      {...props}
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 6v6l4 2" />
+    </svg>
+  );
+
+  return IconComponent ? <IconComponent {...props} /> : <FallbackIcon {...props} />;
 };
 
 export default SafeIcon;
