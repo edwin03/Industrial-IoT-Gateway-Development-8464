@@ -4,6 +4,7 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import { useGateway } from '../context/GatewayContext';
 import ModbusSlaveConfig from '../components/ModbusSlaveConfig';
+import EmailConfig from '../components/EmailConfig';
 
 const { FiSave, FiServer, FiClock } = FiIcons;
 
@@ -43,6 +44,12 @@ function Settings() {
 
   const handleModbusSlaveUpdate = (modbusSlaveSettings) => {
     const newSettings = { ...formData, ...modbusSlaveSettings };
+    setFormData(newSettings);
+    updateSettings(newSettings);
+  };
+
+  const handleEmailUpdate = (emailSettings) => {
+    const newSettings = { ...formData, ...emailSettings };
     setFormData(newSettings);
     updateSettings(newSettings);
   };
@@ -184,6 +191,13 @@ function Settings() {
           </motion.button>
         </div>
       </form>
+
+      {/* Email Configuration */}
+      <EmailConfig
+        settings={settings}
+        onUpdateSettings={handleEmailUpdate}
+        socket={socket}
+      />
 
       {/* Modbus Slave Configuration */}
       <ModbusSlaveConfig
