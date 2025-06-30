@@ -7,6 +7,8 @@ import ModbusRTU from 'modbus-serial';
 import snmp from 'net-snmp';
 import ModbusSlaveServer from './modbusSlaveServer.js';
 import EmailService from './emailService.js';
+import AlarmProcessor from './alarmProcessor.js';
+import DataHistoryManager from './dataHistoryManager.js';
 
 const app = express();
 const server = createServer(app);
@@ -73,10 +75,11 @@ let stats = {
 // Initialize services
 const modbusSlaveServer = new ModbusSlaveServer();
 const emailService = new EmailService();
+const alarmProcessor = new AlarmProcessor();
+const dataHistoryManager = new DataHistoryManager();
 
 // Logging system
 const logs = [];
-
 function addLog(level, message, device = null) {
   const log = {
     timestamp: new Date().toISOString(),
@@ -84,17 +87,17 @@ function addLog(level, message, device = null) {
     message,
     device
   };
-  
   logs.unshift(log);
   if (logs.length > 1000) logs.pop();
-  
+
   // Broadcast to connected clients
   io.emit('newLog', log);
-  
+
   // Send email notification for system errors
   if (level === 'error' && device === 'System') {
-    emailService.sendSystemNotification('systemErrors', message, { timestamp: log.timestamp })
-      .catch(err => console.error('Failed to send email notification:', err));
+    emailService.sendSystemNotification('systemErrors', message, {
+      timestamp: log.timestamp
+    }).catch(err => console.error('Failed to send email notification:', err));
   }
 }
 
@@ -107,7 +110,6 @@ function initializeMQTT() {
 
     const mqttUrl = `mqtt://${settings.mqtt.broker}:${settings.mqtt.port}`;
     const options = {};
-
     if (settings.mqtt.username) {
       options.username = settings.mqtt.username;
       options.password = settings.mqtt.password;
@@ -157,23 +159,98 @@ function initializeEmailService() {
   }
 }
 
-// Modbus TCP handler
+// Initialize Alarm Processor
+function initializeAlarmProcessor() {
+  try {
+    alarmProcessor.initialize(addLog, (eventType, message, details) => {
+      return emailService.sendSystemNotification(eventType, message, details);
+    });
+    addLog('info', 'Alarm processor initialized', 'System');
+  } catch (error) {
+    console.error('Failed to initialize alarm processor:', error);
+    addLog('error', `Failed to initialize alarm processor: ${error.message}`, 'System');
+  }
+}
+
+// Initialize Data History Manager
+function initializeDataHistoryManager() {
+  try {
+    dataHistoryManager.initialize(addLog);
+    addLog('info', 'Data history manager initialized', 'System');
+  } catch (error) {
+    console.error('Failed to initialize data history manager:', error);
+    addLog('error', `Failed to initialize data history manager: ${error.message}`, 'System');
+  }
+}
+
+// Enhanced Modbus TCP handler with multiple function support
 async function readModbusDevice(device) {
   const client = new ModbusRTU();
   try {
     await client.connectTCP(device.host, { port: parseInt(device.port) });
     client.setID(parseInt(device.deviceId) || 1);
+    client.setTimeout(device.modbusConfig?.timeout || 3000);
 
-    const registers = device.registers.split(',').map(r => parseInt(r.trim()));
     const data = {};
 
-    for (const register of registers) {
-      try {
-        const result = await client.readHoldingRegisters(register, 1);
-        data[`register_${register}`] = result.data[0];
-      } catch (error) {
-        console.error(`Error reading register ${register}:`, error);
-        data[`register_${register}`] = null;
+    // Check if device uses new function-based configuration
+    if (device.modbusConfig && device.modbusConfig.functions && device.modbusConfig.functions.length > 0) {
+      // Use new function-based approach
+      for (const func of device.modbusConfig.functions) {
+        try {
+          let result;
+          const startAddr = func.startAddress;
+          const quantity = func.quantity;
+          const funcName = func.name || `Function_${func.functionCode}`;
+
+          switch (func.functionCode) {
+            case 1: // Read Coils
+              result = await client.readCoils(startAddr - 1, quantity); // Modbus uses 0-based addressing
+              for (let i = 0; i < result.data.length; i++) {
+                data[`${funcName}_coil_${startAddr + i}`] = result.data[i] ? 1 : 0;
+              }
+              break;
+
+            case 2: // Read Discrete Inputs
+              result = await client.readDiscreteInputs(startAddr - 10001, quantity);
+              for (let i = 0; i < result.data.length; i++) {
+                data[`${funcName}_input_${startAddr + i}`] = result.data[i] ? 1 : 0;
+              }
+              break;
+
+            case 3: // Read Holding Registers
+              result = await client.readHoldingRegisters(startAddr - 40001, quantity);
+              for (let i = 0; i < result.data.length; i++) {
+                data[`${funcName}_holding_${startAddr + i}`] = result.data[i];
+              }
+              break;
+
+            case 4: // Read Input Registers
+              result = await client.readInputRegisters(startAddr - 30001, quantity);
+              for (let i = 0; i < result.data.length; i++) {
+                data[`${funcName}_input_${startAddr + i}`] = result.data[i];
+              }
+              break;
+
+            default:
+              console.warn(`Unsupported function code: ${func.functionCode}`);
+          }
+        } catch (error) {
+          console.error(`Error reading function ${func.functionCode} at ${func.startAddress}:`, error);
+          data[`${func.name || 'Function'}_error`] = error.message;
+        }
+      }
+    } else {
+      // Use legacy register-based approach for backward compatibility
+      const registers = device.registers.split(',').map(r => parseInt(r.trim()));
+      for (const register of registers) {
+        try {
+          const result = await client.readHoldingRegisters(register - 40001, 1);
+          data[`register_${register}`] = result.data[0];
+        } catch (error) {
+          console.error(`Error reading register ${register}:`, error);
+          data[`register_${register}`] = null;
+        }
       }
     }
 
@@ -237,7 +314,6 @@ async function readBACnetDevice(device) {
 // Device polling
 async function pollDevice(device) {
   const previousStatus = device.status;
-  
   try {
     let data = {};
 
@@ -267,6 +343,12 @@ async function pollDevice(device) {
         .catch(err => console.error('Failed to send device online notification:', err));
     }
 
+    // Process device data for alarms
+    alarmProcessor.processDeviceData(device);
+
+    // Process device data for history logging
+    dataHistoryManager.processDeviceData(device);
+
     // Publish to MQTT
     if (mqttClient && mqttClient.connected) {
       const topic = device.mqttTopic || `${settings.mqtt.topic}/${device.name.replace(/\s+/g, '_')}`;
@@ -277,7 +359,6 @@ async function pollDevice(device) {
         timestamp: device.lastUpdated,
         data
       };
-
       mqttClient.publish(topic, JSON.stringify(payload));
       stats.messagesProcessed++;
     }
@@ -297,9 +378,17 @@ async function pollDevice(device) {
 
     addLog('error', `Failed to poll device ${device.name}: ${error.message}`, device.name);
 
+    // Process device status change for alarms
+    alarmProcessor.processDeviceData(device);
+
+    // Process device status change for history
+    dataHistoryManager.processDeviceData(device);
+
     // Send email notifications for device errors/offline
     if (emailService.isConfigured()) {
-      const notificationType = error.message.includes('timeout') || error.message.includes('connect') ? 'deviceOffline' : 'deviceError';
+      const notificationType = error.message.includes('timeout') || error.message.includes('connect') 
+        ? 'deviceOffline' 
+        : 'deviceError';
       emailService.sendDeviceNotification(device, notificationType, { error: error.message })
         .catch(err => console.error('Failed to send device error notification:', err));
     }
@@ -312,12 +401,10 @@ async function pollDevice(device) {
 // Start polling for a device
 function startDevicePolling(device) {
   stopDevicePolling(device.id);
-
   const interval = device.pollInterval || settings.polling.interval;
   const pollerId = setInterval(() => {
     pollDevice(device);
   }, interval);
-
   devicePollers.set(device.id, pollerId);
 
   // Initial poll after 2 seconds
@@ -399,32 +486,56 @@ io.on('connection', (socket) => {
     socket.emit('modbusSlaveInfo', info);
   });
 
+  // Alarm handlers
+  socket.on('updateAlarms', (alarms) => {
+    alarmProcessor.updateAlarms(alarms);
+    addLog('info', `Alarm configuration updated: ${alarms.length} alarms`, 'System');
+  });
+
+  // Data History handlers
+  socket.on('updateHistoryLoggers', (loggers) => {
+    dataHistoryManager.updateLoggers(loggers);
+    addLog('info', `History loggers updated: ${loggers.filter(l => l.enabled).length} active`, 'Data History');
+  });
+
+  socket.on('getHistoryData', ({ loggerId, startTime, endTime, limit }) => {
+    const data = dataHistoryManager.getHistoryData(loggerId, startTime, endTime, limit);
+    socket.emit('historyDataResponse', data);
+  });
+
+  socket.on('getLoggerStats', (loggerId) => {
+    const stats = dataHistoryManager.getLoggerStats(loggerId);
+    socket.emit('loggerStatsResponse', stats);
+  });
+
+  socket.on('exportHistoryData', ({ loggerId, startTime, endTime, format }) => {
+    try {
+      const exportData = dataHistoryManager.exportHistoryData(loggerId, startTime, endTime, format);
+      socket.emit('exportDataResponse', format === 'csv' ? exportData : JSON.stringify(exportData, null, 2));
+    } catch (error) {
+      socket.emit('exportDataResponse', `Error: ${error.message}`);
+    }
+  });
+
   // Email service handlers
   socket.on('testEmailConnection', async () => {
     try {
       console.log('Testing email connection...');
       addLog('info', 'Email connection test requested', 'Email Service');
       
-      // Get current email settings
       const currentEmailSettings = settings.email;
       console.log('Current email settings:', JSON.stringify(currentEmailSettings, null, 2));
       
-      // Reconfigure email service with current settings
       emailService.configure(currentEmailSettings, addLog);
-      
-      // Test the connection
       const result = await emailService.testConnection();
-      console.log('Email test result:', result);
       
+      console.log('Email test result:', result);
       addLog('success', 'Email connection test successful', 'Email Service');
       socket.emit('emailTestResult', result);
     } catch (error) {
       console.error('Email test failed:', error);
       addLog('error', `Email connection test failed: ${error.message}`, 'Email Service');
-      socket.emit('emailTestResult', { 
-        success: false, 
-        message: error.message 
-      });
+      socket.emit('emailTestResult', { success: false, message: error.message });
     }
   });
 
@@ -433,13 +544,11 @@ io.on('connection', (socket) => {
       console.log('Sending test email to:', recipient);
       addLog('info', `Test email requested for: ${recipient}`, 'Email Service');
       
-      // Get current email settings and reconfigure
       const currentEmailSettings = settings.email;
       emailService.configure(currentEmailSettings, addLog);
-      
       const result = await emailService.sendTestEmail(recipient);
-      console.log('Test email sent:', result);
       
+      console.log('Test email sent:', result);
       addLog('success', `Test email sent to ${recipient}`, 'Email Service');
       socket.emit('emailTestResult', { 
         success: true, 
@@ -449,10 +558,7 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('Failed to send test email:', error);
       addLog('error', `Failed to send test email: ${error.message}`, 'Email Service');
-      socket.emit('emailTestResult', { 
-        success: false, 
-        message: error.message 
-      });
+      socket.emit('emailTestResult', { success: false, message: error.message });
     }
   });
 
@@ -465,7 +571,6 @@ io.on('connection', (socket) => {
       lastError: null,
       lastData: null
     };
-
     devices.push(newDevice);
     startDevicePolling(newDevice);
     updateStats();
@@ -477,7 +582,6 @@ io.on('connection', (socket) => {
     const index = devices.findIndex(d => d.id === updatedDevice.id);
     if (index !== -1) {
       stopDevicePolling(updatedDevice.id);
-      
       devices[index] = {
         ...updatedDevice,
         status: devices[index].status,
@@ -485,7 +589,6 @@ io.on('connection', (socket) => {
         lastError: devices[index].lastError,
         lastData: devices[index].lastData
       };
-
       startDevicePolling(devices[index]);
       updateStats();
       addLog('info', `Device updated: ${updatedDevice.name}`, updatedDevice.name);
@@ -510,9 +613,8 @@ io.on('connection', (socket) => {
     const oldEmailSettings = JSON.stringify(settings.email);
     
     settings = { ...settings, ...newSettings };
-    
     console.log('Settings updated:', JSON.stringify(newSettings, null, 2));
-
+    
     initializeMQTT();
 
     // Handle Modbus slave server changes
@@ -544,6 +646,8 @@ io.on('connection', (socket) => {
 // Initialize services
 initializeMQTT();
 initializeEmailService();
+initializeAlarmProcessor();
+initializeDataHistoryManager();
 scheduleDailySummary();
 
 // Update stats every 10 seconds
@@ -558,6 +662,11 @@ setInterval(() => {
   }
 }, 30000);
 
+// Flush history buffers every 5 minutes
+setInterval(() => {
+  dataHistoryManager.flushAllBuffers();
+}, 5 * 60 * 1000);
+
 // Start server
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
@@ -568,7 +677,10 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down gateway...');
-
+  
+  // Flush all history buffers before shutdown
+  dataHistoryManager.flushAllBuffers();
+  
   // Stop all device pollers
   devicePollers.forEach((pollerId) => {
     clearInterval(pollerId);

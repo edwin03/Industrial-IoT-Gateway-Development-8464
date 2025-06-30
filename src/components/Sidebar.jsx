@@ -4,12 +4,14 @@ import { motion } from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 
-const { FiHome, FiHardDrive, FiSettings, FiFileText, FiActivity, FiDatabase } = FiIcons;
+const { FiHome, FiHardDrive, FiSettings, FiFileText, FiActivity, FiDatabase, FiAlertTriangle, FiClock } = FiIcons;
 
 const navItems = [
   { path: '/', icon: FiHome, label: 'Dashboard' },
   { path: '/devices', icon: FiHardDrive, label: 'Devices' },
   { path: '/data', icon: FiDatabase, label: 'Data Monitor' },
+  { path: '/history', icon: FiClock, label: 'Data History' },
+  { path: '/alarms', icon: FiAlertTriangle, label: 'Alarms' },
   { path: '/settings', icon: FiSettings, label: 'Settings' },
   { path: '/logs', icon: FiFileText, label: 'Logs' }
 ];

@@ -2,10 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { HashRouter as Router, Routes, Route } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import io from 'socket.io-client';
+
 import Sidebar from './components/Sidebar';
 import Dashboard from './pages/Dashboard';
 import Devices from './pages/Devices';
 import Data from './pages/Data';
+import DataHistory from './pages/DataHistory';
+import Alarms from './pages/Alarms';
 import Settings from './pages/Settings';
 import Logs from './pages/Logs';
 import { GatewayProvider } from './context/GatewayContext';
@@ -17,7 +20,7 @@ function App() {
   useEffect(() => {
     const newSocket = io('http://localhost:3001');
     setSocket(newSocket);
-    
+
     // Make socket available globally for components that need it
     window.socketInstance = newSocket;
 
@@ -42,6 +45,7 @@ function App() {
       <Router>
         <div className="flex h-screen bg-gray-50 overflow-hidden">
           <Sidebar />
+          
           <main className="flex-1 flex flex-col overflow-hidden">
             <div className="flex-1 flex flex-col h-full">
               <div className="flex-shrink-0 flex items-center justify-between p-6 bg-white border-b border-gray-200">
@@ -53,12 +57,15 @@ function App() {
                   </span>
                 </div>
               </div>
+
               <div className="flex-1 overflow-y-auto p-6">
                 <AnimatePresence mode="wait">
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
                     <Route path="/devices" element={<Devices />} />
                     <Route path="/data" element={<Data />} />
+                    <Route path="/history" element={<DataHistory />} />
+                    <Route path="/alarms" element={<Alarms />} />
                     <Route path="/settings" element={<Settings />} />
                     <Route path="/logs" element={<Logs />} />
                   </Routes>

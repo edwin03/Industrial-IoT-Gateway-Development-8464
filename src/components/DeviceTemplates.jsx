@@ -5,31 +5,90 @@ import SafeIcon from '../common/SafeIcon';
 
 const { FiTemplate, FiPlus, FiEdit2, FiTrash2, FiSave, FiX, FiCopy } = FiIcons;
 
-// Built-in device templates
+// Updated built-in device templates with Modbus functions
 const DEFAULT_TEMPLATES = [
   {
     id: 'modbus_power_meter',
-    name: 'Power Meter (Modbus)',
-    description: 'Standard power meter with voltage, current, and power readings',
+    name: 'Power Meter (Schneider PM3250)',
+    description: 'Schneider Electric PM3250 power meter with voltage, current, and power readings',
     protocol: 'modbus',
     port: '502',
     deviceId: '1',
-    registers: '40001,40002,40003,40004,40005,40006',
+    registers: '',
     pollInterval: 5000,
     isBuiltIn: true,
-    category: 'Energy'
+    category: 'Energy',
+    modbusConfig: {
+      functions: [
+        { id: 1, functionCode: 3, startAddress: 3027, quantity: 2, name: 'L1_Voltage' },
+        { id: 2, functionCode: 3, startAddress: 3029, quantity: 2, name: 'L2_Voltage' },
+        { id: 3, functionCode: 3, startAddress: 3031, quantity: 2, name: 'L3_Voltage' },
+        { id: 4, functionCode: 3, startAddress: 3053, quantity: 2, name: 'L1_Current' },
+        { id: 5, functionCode: 3, startAddress: 3055, quantity: 2, name: 'L2_Current' },
+        { id: 6, functionCode: 3, startAddress: 3057, quantity: 2, name: 'L3_Current' },
+        { id: 7, functionCode: 3, startAddress: 3059, quantity: 2, name: 'Total_Power' }
+      ]
+    }
   },
   {
     id: 'modbus_temp_sensor',
     name: 'Temperature Sensor (Modbus)',
-    description: 'Temperature and humidity sensor',
+    description: 'Generic temperature and humidity sensor',
     protocol: 'modbus',
     port: '502',
     deviceId: '1',
-    registers: '30001,30002',
+    registers: '',
     pollInterval: 10000,
     isBuiltIn: true,
-    category: 'Environmental'
+    category: 'Environmental',
+    modbusConfig: {
+      functions: [
+        { id: 1, functionCode: 4, startAddress: 30001, quantity: 1, name: 'Temperature' },
+        { id: 2, functionCode: 4, startAddress: 30002, quantity: 1, name: 'Humidity' },
+        { id: 3, functionCode: 4, startAddress: 30003, quantity: 1, name: 'Pressure' }
+      ]
+    }
+  },
+  {
+    id: 'modbus_flow_meter',
+    name: 'Flow Meter (ABB FlowMaster)',
+    description: 'ABB FlowMaster water/gas flow measurement device',
+    protocol: 'modbus',
+    port: '502',
+    deviceId: '1',
+    registers: '',
+    pollInterval: 5000,
+    isBuiltIn: true,
+    category: 'Utilities',
+    modbusConfig: {
+      functions: [
+        { id: 1, functionCode: 3, startAddress: 40001, quantity: 2, name: 'Flow_Rate' },
+        { id: 2, functionCode: 3, startAddress: 40003, quantity: 2, name: 'Total_Volume' },
+        { id: 3, functionCode: 3, startAddress: 40005, quantity: 1, name: 'Temperature' },
+        { id: 4, functionCode: 3, startAddress: 40006, quantity: 1, name: 'Pressure' }
+      ]
+    }
+  },
+  {
+    id: 'modbus_vfd',
+    name: 'Variable Frequency Drive',
+    description: 'Generic VFD with speed, current, and status monitoring',
+    protocol: 'modbus',
+    port: '502',
+    deviceId: '1',
+    registers: '',
+    pollInterval: 2000,
+    isBuiltIn: true,
+    category: 'Motor Control',
+    modbusConfig: {
+      functions: [
+        { id: 1, functionCode: 3, startAddress: 40001, quantity: 1, name: 'Output_Frequency' },
+        { id: 2, functionCode: 3, startAddress: 40002, quantity: 1, name: 'Output_Current' },
+        { id: 3, functionCode: 3, startAddress: 40003, quantity: 1, name: 'Motor_Speed' },
+        { id: 4, functionCode: 1, startAddress: 1, quantity: 8, name: 'Status_Bits' },
+        { id: 5, functionCode: 3, startAddress: 40010, quantity: 1, name: 'DC_Bus_Voltage' }
+      ]
+    }
   },
   {
     id: 'snmp_switch',
@@ -54,18 +113,6 @@ const DEFAULT_TEMPLATES = [
     pollInterval: 15000,
     isBuiltIn: true,
     category: 'HVAC'
-  },
-  {
-    id: 'modbus_flow_meter',
-    name: 'Flow Meter (Modbus)',
-    description: 'Water/gas flow measurement device',
-    protocol: 'modbus',
-    port: '502',
-    deviceId: '1',
-    registers: '30001,30002,30003,30004',
-    pollInterval: 5000,
-    isBuiltIn: true,
-    category: 'Utilities'
   },
   {
     id: 'snmp_ups',
@@ -153,7 +200,7 @@ function DeviceTemplates({ isOpen, onClose, onSelectTemplate }) {
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-hidden"
+          className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -255,19 +302,39 @@ function DeviceTemplates({ isOpen, onClose, onSelectTemplate }) {
                       </button>
                     </div>
                   </div>
-                  
-                  <div className="flex items-center justify-between text-sm">
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                      template.protocol === 'modbus' ? 'bg-blue-100 text-blue-800' :
-                      template.protocol === 'bacnet' ? 'bg-green-100 text-green-800' :
-                      template.protocol === 'snmp' ? 'bg-purple-100 text-purple-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {template.protocol.toUpperCase()}
-                    </span>
-                    <span className="text-gray-500">{template.category}</span>
+
+                  {/* Template Details */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className={`px-2 py-1 text-xs rounded-full ${
+                        template.protocol === 'modbus' ? 'bg-blue-100 text-blue-800' :
+                        template.protocol === 'bacnet' ? 'bg-green-100 text-green-800' :
+                        template.protocol === 'snmp' ? 'bg-purple-100 text-purple-800' :
+                        'bg-gray-100 text-gray-800'
+                      }`}>
+                        {template.protocol.toUpperCase()}
+                      </span>
+                      <span className="text-gray-500">{template.category}</span>
+                    </div>
+
+                    {/* Show Modbus functions if available */}
+                    {template.protocol === 'modbus' && template.modbusConfig?.functions && (
+                      <div className="text-xs text-gray-600">
+                        <p className="font-medium">Functions:</p>
+                        <div className="space-y-1">
+                          {template.modbusConfig.functions.slice(0, 3).map((func, index) => (
+                            <p key={index}>
+                              FC{func.functionCode.toString().padStart(2, '0')}: {func.name} ({func.startAddress}:{func.quantity})
+                            </p>
+                          ))}
+                          {template.modbusConfig.functions.length > 3 && (
+                            <p className="text-gray-500">+{template.modbusConfig.functions.length - 3} more...</p>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  
+
                   {template.isBuiltIn && (
                     <div className="mt-2">
                       <span className="inline-flex items-center px-2 py-1 text-xs font-medium bg-gray-100 text-gray-800 rounded-full">
@@ -301,7 +368,7 @@ function DeviceTemplates({ isOpen, onClose, onSelectTemplate }) {
           onSave={(template) => {
             if (editingTemplate && !editingTemplate.isBuiltIn) {
               // Update existing template
-              const newTemplates = templates.map(t => 
+              const newTemplates = templates.map(t =>
                 t.id === template.id ? template : t
               );
               saveTemplates(newTemplates);
@@ -329,11 +396,14 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
     name: '',
     description: '',
     protocol: 'modbus',
-    port: '',
+    port: '502',
     deviceId: '',
     registers: '',
     pollInterval: 5000,
-    category: 'Custom'
+    category: 'Custom',
+    modbusConfig: {
+      functions: []
+    }
   });
 
   useEffect(() => {
@@ -348,7 +418,10 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
         deviceId: '',
         registers: '',
         pollInterval: 5000,
-        category: 'Custom'
+        category: 'Custom',
+        modbusConfig: {
+          functions: []
+        }
       });
     }
   }, [template, isOpen]);
@@ -360,7 +433,10 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const getDefaultPort = (protocol) => {
@@ -481,6 +557,7 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Device ID
@@ -495,19 +572,21 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Registers/Points (comma-separated)
-            </label>
-            <input
-              type="text"
-              name="registers"
-              value={formData.registers}
-              onChange={handleChange}
-              placeholder="e.g., 40001,40002,40003"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
-          </div>
+          {formData.protocol !== 'modbus' && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Registers/Points (comma-separated)
+              </label>
+              <input
+                type="text"
+                name="registers"
+                value={formData.registers}
+                onChange={handleChange}
+                placeholder="e.g., 40001,40002,40003"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
