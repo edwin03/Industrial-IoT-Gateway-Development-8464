@@ -12,12 +12,37 @@ A comprehensive IoT protocol gateway that converts Modbus TCP, BACnet/IP, and SN
 - **Logging System**: Comprehensive logging with filtering and export
 - **Statistics Dashboard**: Real-time statistics and charts
 
+## Quick Start
+
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Start the Application
+
+```bash
+npm start
+```
+
+This will start both the backend server (port 3001) and frontend development server (port 5173).
+
+### 3. Access the Interface
+
+Open your web browser and navigate to: http://localhost:5173
+
+### 4. Default Login Credentials
+
+- **Admin**: admin / admin123
+- **Operator**: operator / operator123  
+- **Viewer**: viewer / viewer123
+
 ## Installation
 
 ### Prerequisites
 
 - Node.js (v16 or higher)
-- Debian Linux OS
 - MQTT broker (Mosquitto recommended)
 
 ### Install Dependencies
@@ -164,6 +189,7 @@ The gateway provides WebSocket communication for real-time updates:
 1. **MQTT Connection Failed**: Check broker settings and network connectivity
 2. **Device Not Responding**: Verify device IP address, port, and protocol settings
 3. **Permission Denied**: Ensure proper user permissions for system service
+4. **Missing Dependencies**: Run `npm install` to install all required packages
 
 ### Logs
 

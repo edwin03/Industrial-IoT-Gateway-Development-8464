@@ -1,0 +1,18 @@
+{
+  "name": "iot-gateway-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "IoT Protocol Gateway Server",
+  "main": "index.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.5",
+    "cors": "^2.8.5",
+    "mqtt": "^5.3.4",
+    "modbus-serial": "^8.0.17",
+    "net-snmp": "^3.11.0",
+    "nodemailer": "^6.9.8",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
+  }
+}

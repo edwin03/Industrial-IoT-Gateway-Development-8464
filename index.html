@@ -5,9 +5,82 @@
     <link rel="icon" type="image/svg+xml" href="/gateway-icon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>IoT Protocol Gateway</title>
+    <style>
+      /* Loading styles */
+      #loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #f8fafc;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }
+      
+      #loading .spinner {
+        width: 40px;
+        height: 40px;
+        border: 4px solid #e5e7eb;
+        border-top: 4px solid #3b82f6;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      #loading .text {
+        margin-left: 16px;
+        color: #374151;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+    </style>
   </head>
   <body>
+    <!-- Loading indicator -->
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="text">Loading IoT Gateway...</div>
+    </div>
+    
+    <!-- React app root -->
     <div id="root"></div>
+    
     <script type="module" src="/src/main.jsx"></script>
+    
+    <script>
+      // Hide loading indicator once React loads
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const loading = document.getElementById('loading');
+          if (loading) {
+            loading.style.display = 'none';
+          }
+        }, 1000);
+      });
+      
+      // Error handling for module loading
+      window.addEventListener('error', (e) => {
+        console.error('Application loading error:', e);
+        const loading = document.getElementById('loading');
+        if (loading) {
+          loading.innerHTML = `
+            <div style="text-align: center;">
+              <h2 style="color: #dc2626; margin-bottom: 16px;">Loading Error</h2>
+              <p style="color: #374151; margin-bottom: 16px;">Failed to load the application.</p>
+              <button onclick="window.location.reload()" 
+                      style="background: #3b82f6; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;">
+                Refresh Page
+              </button>
+            </div>
+          `;
+        }
+      });
+    </script>
   </body>
 </html>
