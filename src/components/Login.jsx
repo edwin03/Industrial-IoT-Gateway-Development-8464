@@ -22,8 +22,11 @@ function Login() {
     setError('');
 
     try {
+      console.log('Login attempt:', formData.username, formData.password);
+      
       // Try to authenticate the user
       const result = authenticateUser(formData.username, formData.password);
+      console.log('Auth result:', result);
       
       if (result.success) {
         const mockToken = 'jwt-token-' + Date.now();
@@ -32,6 +35,7 @@ function Login() {
         setError(result.message);
       }
     } catch (error) {
+      console.error('Login error:', error);
       setError('Login failed. Please try again.');
     }
 
@@ -47,6 +51,7 @@ function Login() {
 
   const handleDemoLogin = (username, password) => {
     setFormData({ username, password });
+    setError(''); // Clear any existing errors when using demo credentials
   };
 
   return (
