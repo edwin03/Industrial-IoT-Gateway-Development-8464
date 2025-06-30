@@ -135,7 +135,17 @@ function initializeMQTT() {
   }
 }
 
-// Enhanced Modbus TCP handler with multiple function support
+// Apply Modbus scaling to a value
+function applyModbusScaling(value, scalingConfig) {
+  if (!scalingConfig || !scalingConfig.enabled) {
+    return value;
+  }
+  
+  const scaled = (value * scalingConfig.multiplier) + scalingConfig.offset;
+  return parseFloat(scaled.toFixed(scalingConfig.decimals));
+}
+
+// Enhanced Modbus TCP handler with scaling support
 async function readModbusDevice(device) {
   const client = new ModbusRTU();
   try {
@@ -144,10 +154,20 @@ async function readModbusDevice(device) {
     client.setTimeout(device.modbusConfig?.timeout || 3000);
 
     const data = {};
+    const scalingMap = new Map();
+
+    // Build scaling map for quick lookup
+    if (device.modbusConfig?.scaling) {
+      device.modbusConfig.scaling.forEach(scale => {
+        if (scale.enabled && scale.register) {
+          scalingMap.set(scale.register, scale);
+        }
+      });
+    }
 
     // Check if device uses new function-based configuration
     if (device.modbusConfig && device.modbusConfig.functions && device.modbusConfig.functions.length > 0) {
-      // Use new function-based approach
+      // Use new function-based approach with scaling
       for (const func of device.modbusConfig.functions) {
         try {
           let result;
@@ -159,27 +179,72 @@ async function readModbusDevice(device) {
             case 1: // Read Coils
               result = await client.readCoils(startAddr - 1, quantity); // Modbus uses 0-based addressing
               for (let i = 0; i < result.data.length; i++) {
-                data[`${funcName}_coil_${startAddr + i}`] = result.data[i] ? 1 : 0;
+                const register = (startAddr + i).toString();
+                let value = result.data[i] ? 1 : 0;
+                
+                // Apply scaling if configured
+                const scaling = scalingMap.get(register);
+                if (scaling) {
+                  value = applyModbusScaling(value, scaling);
+                  data[`${scaling.name || funcName}_coil_${register}`] = value;
+                  data[`${scaling.name || funcName}_coil_${register}_unit`] = scaling.unit;
+                } else {
+                  data[`${funcName}_coil_${register}`] = value;
+                }
               }
               break;
+              
             case 2: // Read Discrete Inputs
               result = await client.readDiscreteInputs(startAddr - 10001, quantity);
               for (let i = 0; i < result.data.length; i++) {
-                data[`${funcName}_input_${startAddr + i}`] = result.data[i] ? 1 : 0;
+                const register = (startAddr + i).toString();
+                let value = result.data[i] ? 1 : 0;
+                
+                const scaling = scalingMap.get(register);
+                if (scaling) {
+                  value = applyModbusScaling(value, scaling);
+                  data[`${scaling.name || funcName}_input_${register}`] = value;
+                  data[`${scaling.name || funcName}_input_${register}_unit`] = scaling.unit;
+                } else {
+                  data[`${funcName}_input_${register}`] = value;
+                }
               }
               break;
+              
             case 3: // Read Holding Registers
               result = await client.readHoldingRegisters(startAddr - 40001, quantity);
               for (let i = 0; i < result.data.length; i++) {
-                data[`${funcName}_holding_${startAddr + i}`] = result.data[i];
+                const register = (startAddr + i).toString();
+                let value = result.data[i];
+                
+                const scaling = scalingMap.get(register);
+                if (scaling) {
+                  value = applyModbusScaling(value, scaling);
+                  data[`${scaling.name || funcName}_holding_${register}`] = value;
+                  data[`${scaling.name || funcName}_holding_${register}_unit`] = scaling.unit;
+                } else {
+                  data[`${funcName}_holding_${register}`] = value;
+                }
               }
               break;
+              
             case 4: // Read Input Registers
               result = await client.readInputRegisters(startAddr - 30001, quantity);
               for (let i = 0; i < result.data.length; i++) {
-                data[`${funcName}_input_${startAddr + i}`] = result.data[i];
+                const register = (startAddr + i).toString();
+                let value = result.data[i];
+                
+                const scaling = scalingMap.get(register);
+                if (scaling) {
+                  value = applyModbusScaling(value, scaling);
+                  data[`${scaling.name || funcName}_input_${register}`] = value;
+                  data[`${scaling.name || funcName}_input_${register}_unit`] = scaling.unit;
+                } else {
+                  data[`${funcName}_input_${register}`] = value;
+                }
               }
               break;
+              
             default:
               console.warn(`Unsupported function code: ${func.functionCode}`);
           }
@@ -189,12 +254,22 @@ async function readModbusDevice(device) {
         }
       }
     } else {
-      // Use legacy register-based approach for backward compatibility
+      // Use legacy register-based approach for backward compatibility with scaling
       const registers = device.registers.split(',').map(r => parseInt(r.trim()));
       for (const register of registers) {
         try {
           const result = await client.readHoldingRegisters(register - 40001, 1);
-          data[`register_${register}`] = result.data[0];
+          let value = result.data[0];
+          
+          // Apply scaling if configured
+          const scaling = scalingMap.get(register.toString());
+          if (scaling) {
+            value = applyModbusScaling(value, scaling);
+            data[`${scaling.name || 'register'}_${register}`] = value;
+            data[`${scaling.name || 'register'}_${register}_unit`] = scaling.unit;
+          } else {
+            data[`register_${register}`] = value;
+          }
         } catch (error) {
           console.error(`Error reading register ${register}:`, error);
           data[`register_${register}`] = null;

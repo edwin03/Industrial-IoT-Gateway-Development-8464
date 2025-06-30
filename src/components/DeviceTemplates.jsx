@@ -5,7 +5,7 @@ import SafeIcon from '../common/SafeIcon';
 
 const { FiTemplate, FiPlus, FiEdit2, FiTrash2, FiSave, FiX, FiCopy } = FiIcons;
 
-// Updated built-in device templates with Modbus functions
+// Updated built-in device templates with Modbus functions and scaling
 const DEFAULT_TEMPLATES = [
   {
     id: 'modbus_power_meter',
@@ -27,13 +27,22 @@ const DEFAULT_TEMPLATES = [
         { id: 5, functionCode: 3, startAddress: 3055, quantity: 2, name: 'L2_Current' },
         { id: 6, functionCode: 3, startAddress: 3057, quantity: 2, name: 'L3_Current' },
         { id: 7, functionCode: 3, startAddress: 3059, quantity: 2, name: 'Total_Power' }
+      ],
+      scaling: [
+        { id: 1, register: '3027', name: 'L1 Voltage', multiplier: 0.1, offset: 0, decimals: 1, unit: 'V', enabled: true },
+        { id: 2, register: '3029', name: 'L2 Voltage', multiplier: 0.1, offset: 0, decimals: 1, unit: 'V', enabled: true },
+        { id: 3, register: '3031', name: 'L3 Voltage', multiplier: 0.1, offset: 0, decimals: 1, unit: 'V', enabled: true },
+        { id: 4, register: '3053', name: 'L1 Current', multiplier: 0.001, offset: 0, decimals: 3, unit: 'A', enabled: true },
+        { id: 5, register: '3055', name: 'L2 Current', multiplier: 0.001, offset: 0, decimals: 3, unit: 'A', enabled: true },
+        { id: 6, register: '3057', name: 'L3 Current', multiplier: 0.001, offset: 0, decimals: 3, unit: 'A', enabled: true },
+        { id: 7, register: '3059', name: 'Total Power', multiplier: 1, offset: 0, decimals: 0, unit: 'W', enabled: true }
       ]
     }
   },
   {
     id: 'modbus_temp_sensor',
     name: 'Temperature Sensor (Modbus)',
-    description: 'Generic temperature and humidity sensor',
+    description: 'Generic temperature and humidity sensor with scaling',
     protocol: 'modbus',
     port: '502',
     deviceId: '1',
@@ -46,13 +55,18 @@ const DEFAULT_TEMPLATES = [
         { id: 1, functionCode: 4, startAddress: 30001, quantity: 1, name: 'Temperature' },
         { id: 2, functionCode: 4, startAddress: 30002, quantity: 1, name: 'Humidity' },
         { id: 3, functionCode: 4, startAddress: 30003, quantity: 1, name: 'Pressure' }
+      ],
+      scaling: [
+        { id: 1, register: '30001', name: 'Temperature', multiplier: 0.1, offset: 0, decimals: 1, unit: '°C', enabled: true },
+        { id: 2, register: '30002', name: 'Humidity', multiplier: 0.1, offset: 0, decimals: 1, unit: '%', enabled: true },
+        { id: 3, register: '30003', name: 'Pressure', multiplier: 0.1, offset: 0, decimals: 1, unit: 'kPa', enabled: true }
       ]
     }
   },
   {
     id: 'modbus_flow_meter',
     name: 'Flow Meter (ABB FlowMaster)',
-    description: 'ABB FlowMaster water/gas flow measurement device',
+    description: 'ABB FlowMaster water/gas flow measurement device with engineering units',
     protocol: 'modbus',
     port: '502',
     deviceId: '1',
@@ -66,13 +80,19 @@ const DEFAULT_TEMPLATES = [
         { id: 2, functionCode: 3, startAddress: 40003, quantity: 2, name: 'Total_Volume' },
         { id: 3, functionCode: 3, startAddress: 40005, quantity: 1, name: 'Temperature' },
         { id: 4, functionCode: 3, startAddress: 40006, quantity: 1, name: 'Pressure' }
+      ],
+      scaling: [
+        { id: 1, register: '40001', name: 'Flow Rate', multiplier: 0.01, offset: 0, decimals: 2, unit: 'L/min', enabled: true },
+        { id: 2, register: '40003', name: 'Total Volume', multiplier: 0.001, offset: 0, decimals: 3, unit: 'm³', enabled: true },
+        { id: 3, register: '40005', name: 'Temperature', multiplier: 0.1, offset: 0, decimals: 1, unit: '°C', enabled: true },
+        { id: 4, register: '40006', name: 'Pressure', multiplier: 0.1, offset: 0, decimals: 1, unit: 'bar', enabled: true }
       ]
     }
   },
   {
     id: 'modbus_vfd',
     name: 'Variable Frequency Drive',
-    description: 'Generic VFD with speed, current, and status monitoring',
+    description: 'Generic VFD with speed, current, and status monitoring including scaled values',
     protocol: 'modbus',
     port: '502',
     deviceId: '1',
@@ -87,6 +107,12 @@ const DEFAULT_TEMPLATES = [
         { id: 3, functionCode: 3, startAddress: 40003, quantity: 1, name: 'Motor_Speed' },
         { id: 4, functionCode: 1, startAddress: 1, quantity: 8, name: 'Status_Bits' },
         { id: 5, functionCode: 3, startAddress: 40010, quantity: 1, name: 'DC_Bus_Voltage' }
+      ],
+      scaling: [
+        { id: 1, register: '40001', name: 'Output Frequency', multiplier: 0.01, offset: 0, decimals: 2, unit: 'Hz', enabled: true },
+        { id: 2, register: '40002', name: 'Output Current', multiplier: 0.1, offset: 0, decimals: 1, unit: 'A', enabled: true },
+        { id: 3, register: '40003', name: 'Motor Speed', multiplier: 1, offset: 0, decimals: 0, unit: 'RPM', enabled: true },
+        { id: 5, register: '40010', name: 'DC Bus Voltage', multiplier: 0.1, offset: 0, decimals: 1, unit: 'V', enabled: true }
       ]
     }
   },
@@ -317,16 +343,24 @@ function DeviceTemplates({ isOpen, onClose, onSelectTemplate }) {
                       <span className="text-gray-500">{template.category}</span>
                     </div>
 
-                    {/* Show Modbus functions if available */}
+                    {/* Show Modbus functions and scaling if available */}
                     {template.protocol === 'modbus' && template.modbusConfig?.functions && (
                       <div className="text-xs text-gray-600">
-                        <p className="font-medium">Functions:</p>
+                        <p className="font-medium">Functions & Scaling:</p>
                         <div className="space-y-1">
-                          {template.modbusConfig.functions.slice(0, 3).map((func, index) => (
-                            <p key={index}>
-                              FC{func.functionCode.toString().padStart(2, '0')}: {func.name} ({func.startAddress}:{func.quantity})
-                            </p>
-                          ))}
+                          {template.modbusConfig.functions.slice(0, 3).map((func, index) => {
+                            const scaling = template.modbusConfig.scaling?.find(s => s.register === func.startAddress.toString());
+                            return (
+                              <p key={index}>
+                                FC{func.functionCode.toString().padStart(2, '0')}: {func.name} ({func.startAddress}:{func.quantity})
+                                {scaling && scaling.enabled && (
+                                  <span className="text-green-600 ml-1">
+                                    → {scaling.name} ({scaling.unit})
+                                  </span>
+                                )}
+                              </p>
+                            );
+                          })}
                           {template.modbusConfig.functions.length > 3 && (
                             <p className="text-gray-500">+{template.modbusConfig.functions.length - 3} more...</p>
                           )}
@@ -368,17 +402,13 @@ function DeviceTemplates({ isOpen, onClose, onSelectTemplate }) {
           onSave={(template) => {
             if (editingTemplate && !editingTemplate.isBuiltIn) {
               // Update existing template
-              const newTemplates = templates.map(t =>
+              const newTemplates = templates.map(t => 
                 t.id === template.id ? template : t
               );
               saveTemplates(newTemplates);
             } else {
               // Create new template
-              const newTemplate = {
-                ...template,
-                id: `custom_${Date.now()}`,
-                isBuiltIn: false
-              };
+              const newTemplate = { ...template, id: `custom_${Date.now()}`, isBuiltIn: false };
               saveTemplates([...templates, newTemplate]);
             }
             setShowCreateModal(false);
@@ -402,7 +432,8 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
     pollInterval: 5000,
     category: 'Custom',
     modbusConfig: {
-      functions: []
+      functions: [],
+      scaling: []
     }
   });
 
@@ -420,7 +451,8 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
         pollInterval: 5000,
         category: 'Custom',
         modbusConfig: {
-          functions: []
+          functions: [],
+          scaling: []
         }
       });
     }
@@ -433,10 +465,7 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const getDefaultPort = (protocol) => {
@@ -557,7 +586,6 @@ function CreateTemplateModal({ isOpen, onClose, template, onSave }) {
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Device ID

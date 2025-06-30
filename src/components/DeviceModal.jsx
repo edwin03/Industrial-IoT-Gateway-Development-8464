@@ -7,7 +7,7 @@ import DeviceTemplates from './DeviceTemplates';
 import BACnetDiscovery from './BACnetDiscovery';
 import BACnetObjectBrowser from './BACnetObjectBrowser';
 
-const { FiX, FiSave, FiTemplate, FiPlus, FiTrash2, FiInfo, FiSearch, FiEye } = FiIcons;
+const { FiX, FiSave, FiTemplate, FiPlus, FiTrash2, FiInfo, FiSearch, FiEye, FiSettings } = FiIcons;
 
 // Modbus function codes and their descriptions
 const MODBUS_FUNCTIONS = [
@@ -22,6 +22,20 @@ const MODBUS_FUNCTIONS = [
 ];
 
 const READ_FUNCTIONS = [1, 2, 3, 4];
+
+// Common scaling presets
+const SCALING_PRESETS = [
+  { name: 'No Scaling', multiplier: 1, offset: 0, decimals: 0, unit: '' },
+  { name: 'Temperature (°C)', multiplier: 0.1, offset: 0, decimals: 1, unit: '°C' },
+  { name: 'Temperature (°F)', multiplier: 0.1, offset: 32, decimals: 1, unit: '°F' },
+  { name: 'Pressure (kPa)', multiplier: 0.1, offset: 0, decimals: 1, unit: 'kPa' },
+  { name: 'Flow (L/min)', multiplier: 0.01, offset: 0, decimals: 2, unit: 'L/min' },
+  { name: 'Percentage (%)', multiplier: 0.01, offset: 0, decimals: 1, unit: '%' },
+  { name: 'Voltage (V)', multiplier: 0.001, offset: 0, decimals: 3, unit: 'V' },
+  { name: 'Current (A)', multiplier: 0.001, offset: 0, decimals: 3, unit: 'A' },
+  { name: 'Power (W)', multiplier: 1, offset: 0, decimals: 0, unit: 'W' },
+  { name: 'Energy (kWh)', multiplier: 0.001, offset: 0, decimals: 3, unit: 'kWh' }
+];
 
 function DeviceModal({ isOpen, onClose, device }) {
   const { addDevice, updateDevice } = useGateway();
@@ -38,7 +52,8 @@ function DeviceModal({ isOpen, onClose, device }) {
     modbusConfig: {
       functions: [],
       timeout: 3000,
-      retries: 3
+      retries: 3,
+      scaling: [] // New scaling configuration
     },
     bacnetConfig: {
       networkNumber: 0,
@@ -61,7 +76,8 @@ function DeviceModal({ isOpen, onClose, device }) {
         modbusConfig: device.modbusConfig || {
           functions: [],
           timeout: 3000,
-          retries: 3
+          retries: 3,
+          scaling: []
         },
         bacnetConfig: device.bacnetConfig || {
           networkNumber: 0,
@@ -86,7 +102,8 @@ function DeviceModal({ isOpen, onClose, device }) {
         modbusConfig: {
           functions: [],
           timeout: 3000,
-          retries: 3
+          retries: 3,
+          scaling: []
         },
         bacnetConfig: {
           networkNumber: 0,
@@ -280,6 +297,69 @@ function DeviceModal({ isOpen, onClose, device }) {
     );
   };
 
+  // Scaling configuration functions
+  const addScalingConfig = () => {
+    const newScaling = {
+      id: Date.now(),
+      register: '',
+      name: '',
+      multiplier: 1,
+      offset: 0,
+      decimals: 2,
+      unit: '',
+      enabled: true
+    };
+
+    handleModbusConfigChange('scaling', [
+      ...formData.modbusConfig.scaling,
+      newScaling
+    ]);
+  };
+
+  const removeScalingConfig = (id) => {
+    handleModbusConfigChange('scaling',
+      formData.modbusConfig.scaling.filter(scale => scale.id !== id)
+    );
+  };
+
+  const updateScalingConfig = (id, field, value) => {
+    handleModbusConfigChange('scaling',
+      formData.modbusConfig.scaling.map(scale =>
+        scale.id === id ? { ...scale, [field]: value } : scale
+      )
+    );
+  };
+
+  const applyScalingPreset = (scalingId, preset) => {
+    updateScalingConfig(scalingId, 'multiplier', preset.multiplier);
+    updateScalingConfig(scalingId, 'offset', preset.offset);
+    updateScalingConfig(scalingId, 'decimals', preset.decimals);
+    updateScalingConfig(scalingId, 'unit', preset.unit);
+  };
+
+  const getAvailableRegisters = () => {
+    const registers = new Set();
+    
+    // From functions
+    formData.modbusConfig.functions.forEach(func => {
+      for (let i = 0; i < func.quantity; i++) {
+        registers.add((func.startAddress + i).toString());
+      }
+    });
+
+    // From legacy registers string
+    if (formData.registers) {
+      formData.registers.split(',').forEach(reg => {
+        const regNum = reg.trim();
+        if (regNum && !regNum.includes(':')) {
+          registers.add(regNum);
+        }
+      });
+    }
+
+    return Array.from(registers).sort((a, b) => parseInt(a) - parseInt(b));
+  };
+
   const getFunctionInfo = (functionCode) => {
     return MODBUS_FUNCTIONS.find(f => f.code === functionCode);
   };
@@ -309,6 +389,12 @@ function DeviceModal({ isOpen, onClose, device }) {
     ];
   };
 
+  const calculateScaledValue = (rawValue, scaling) => {
+    if (!scaling.enabled) return rawValue;
+    const scaled = (rawValue * scaling.multiplier) + scaling.offset;
+    return parseFloat(scaled.toFixed(scaling.decimals));
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -324,7 +410,7 @@ function DeviceModal({ isOpen, onClose, device }) {
           initial={{ scale: 0.9, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.9, opacity: 0 }}
-          className="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto"
+          className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
@@ -482,6 +568,356 @@ function DeviceModal({ isOpen, onClose, device }) {
               </div>
             </div>
 
+            {/* Modbus-specific Configuration */}
+            {formData.protocol === 'modbus' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-semibold text-gray-900">Modbus Configuration</h4>
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setShowModbusHelper(!showModbusHelper)}
+                    className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-blue-200 transition-colors text-sm"
+                  >
+                    <SafeIcon icon={FiSettings} className="w-4 h-4" />
+                    <span>Advanced Config</span>
+                  </motion.button>
+                </div>
+
+                {/* Modbus Functions */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Modbus Functions
+                    </label>
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={addModbusFunction}
+                      className="bg-primary-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors text-sm"
+                    >
+                      <SafeIcon icon={FiPlus} className="w-4 h-4" />
+                      <span>Add Function</span>
+                    </motion.button>
+                  </div>
+
+                  {formData.modbusConfig.functions.length === 0 ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <SafeIcon icon={FiSettings} className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-gray-600 mb-2">No Modbus functions configured</p>
+                      <p className="text-sm text-gray-500">Add functions to specify which registers to read</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {formData.modbusConfig.functions.map((func) => (
+                        <div key={func.id} className="border border-gray-200 rounded-lg p-4">
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Function Code
+                              </label>
+                              <select
+                                value={func.functionCode}
+                                onChange={(e) => updateModbusFunction(func.id, 'functionCode', parseInt(e.target.value))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              >
+                                {MODBUS_FUNCTIONS.filter(f => READ_FUNCTIONS.includes(f.code)).map(f => (
+                                  <option key={f.code} value={f.code}>
+                                    FC{f.code} - {f.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Start Address
+                              </label>
+                              <input
+                                type="number"
+                                value={func.startAddress}
+                                onChange={(e) => updateModbusFunction(func.id, 'startAddress', parseInt(e.target.value))}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Quantity
+                              </label>
+                              <input
+                                type="number"
+                                value={func.quantity}
+                                onChange={(e) => updateModbusFunction(func.id, 'quantity', parseInt(e.target.value))}
+                                min="1"
+                                max="125"
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-medium text-gray-700 mb-1">
+                                Name
+                              </label>
+                              <input
+                                type="text"
+                                value={func.name}
+                                onChange={(e) => updateModbusFunction(func.id, 'name', e.target.value)}
+                                className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                              />
+                            </div>
+                            <div className="flex items-end">
+                              <motion.button
+                                type="button"
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                onClick={() => removeModbusFunction(func.id)}
+                                className="text-red-600 hover:text-red-800 p-1"
+                                title="Remove function"
+                              >
+                                <SafeIcon icon={FiTrash2} className="w-4 h-4" />
+                              </motion.button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Value Scaling Configuration */}
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Value Scaling Configuration
+                    </label>
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={addScalingConfig}
+                      className="bg-green-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors text-sm"
+                    >
+                      <SafeIcon icon={FiPlus} className="w-4 h-4" />
+                      <span>Add Scaling</span>
+                    </motion.button>
+                  </div>
+
+                  {formData.modbusConfig.scaling.length === 0 ? (
+                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                      <SafeIcon icon={FiSettings} className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                      <p className="text-gray-600 mb-2">No scaling configured</p>
+                      <p className="text-sm text-gray-500">Add scaling to convert raw values to engineering units</p>
+                      <div className="mt-3 text-xs text-gray-500">
+                        <p>Formula: Scaled Value = (Raw Value × Multiplier) + Offset</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {formData.modbusConfig.scaling.map((scaling) => (
+                        <div key={scaling.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            {/* Basic Configuration */}
+                            <div className="space-y-3">
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Register/Address
+                                  </label>
+                                  <select
+                                    value={scaling.register}
+                                    onChange={(e) => updateScalingConfig(scaling.id, 'register', e.target.value)}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  >
+                                    <option value="">Select Register</option>
+                                    {getAvailableRegisters().map(reg => (
+                                      <option key={reg} value={reg}>{reg}</option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Display Name
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={scaling.name}
+                                    onChange={(e) => updateScalingConfig(scaling.id, 'name', e.target.value)}
+                                    placeholder="e.g., Temperature"
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-3 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Multiplier
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={scaling.multiplier}
+                                    onChange={(e) => updateScalingConfig(scaling.id, 'multiplier', parseFloat(e.target.value))}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Offset
+                                  </label>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={scaling.offset}
+                                    onChange={(e) => updateScalingConfig(scaling.id, 'offset', parseFloat(e.target.value))}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Decimals
+                                  </label>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    max="6"
+                                    value={scaling.decimals}
+                                    onChange={(e) => updateScalingConfig(scaling.id, 'decimals', parseInt(e.target.value))}
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                                    Unit
+                                  </label>
+                                  <input
+                                    type="text"
+                                    value={scaling.unit}
+                                    onChange={(e) => updateScalingConfig(scaling.id, 'unit', e.target.value)}
+                                    placeholder="e.g., °C, %, kW"
+                                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  />
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                  <label className="flex items-center">
+                                    <input
+                                      type="checkbox"
+                                      checked={scaling.enabled}
+                                      onChange={(e) => updateScalingConfig(scaling.id, 'enabled', e.target.checked)}
+                                      className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                                    />
+                                    <span className="ml-2 text-xs text-gray-700">Enabled</span>
+                                  </label>
+                                  <motion.button
+                                    type="button"
+                                    whileHover={{ scale: 1.05 }}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => removeScalingConfig(scaling.id)}
+                                    className="text-red-600 hover:text-red-800 p-1"
+                                    title="Remove scaling"
+                                  >
+                                    <SafeIcon icon={FiTrash2} className="w-4 h-4" />
+                                  </motion.button>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Presets and Preview */}
+                            <div className="space-y-3">
+                              <div>
+                                <label className="block text-xs font-medium text-gray-700 mb-1">
+                                  Quick Presets
+                                </label>
+                                <select
+                                  onChange={(e) => {
+                                    const preset = SCALING_PRESETS.find(p => p.name === e.target.value);
+                                    if (preset) applyScalingPreset(scaling.id, preset);
+                                  }}
+                                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
+                                  defaultValue=""
+                                >
+                                  <option value="">Select preset...</option>
+                                  {SCALING_PRESETS.map(preset => (
+                                    <option key={preset.name} value={preset.name}>
+                                      {preset.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+
+                              <div className="bg-white border border-gray-200 rounded p-3">
+                                <div className="text-xs font-medium text-gray-700 mb-2">Formula & Preview</div>
+                                <div className="text-xs text-gray-600 mb-2">
+                                  Scaled = (Raw × {scaling.multiplier}) + {scaling.offset}
+                                </div>
+                                <div className="space-y-1 text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Raw: 1000</span>
+                                    <span className="font-medium">
+                                      → {calculateScaledValue(1000, scaling)} {scaling.unit}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Raw: 2500</span>
+                                    <span className="font-medium">
+                                      → {calculateScaledValue(2500, scaling)} {scaling.unit}
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-gray-600">Raw: 5000</span>
+                                    <span className="font-medium">
+                                      → {calculateScaledValue(5000, scaling)} {scaling.unit}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Advanced Settings */}
+                {showModbusHelper && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Timeout (ms)
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.modbusConfig.timeout}
+                          onChange={(e) => handleModbusConfigChange('timeout', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Retries
+                        </label>
+                        <input
+                          type="number"
+                          value={formData.modbusConfig.retries}
+                          onChange={(e) => handleModbusConfigChange('retries', parseInt(e.target.value))}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        />
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </div>
+            )}
+
             {/* BACnet-specific Configuration */}
             {formData.protocol === 'bacnet' && (
               <div className="space-y-4">
@@ -600,7 +1036,7 @@ function DeviceModal({ isOpen, onClose, device }) {
             )}
 
             {/* Non-BACnet Configuration */}
-            {formData.protocol !== 'bacnet' && (
+            {formData.protocol !== 'bacnet' && formData.protocol !== 'modbus' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {formData.protocol === 'snmp' ? 'OIDs' : 'Object IDs'} (comma-separated)
@@ -617,6 +1053,26 @@ function DeviceModal({ isOpen, onClose, device }) {
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
+              </div>
+            )}
+
+            {/* Legacy Modbus Registers (if no functions configured) */}
+            {formData.protocol === 'modbus' && formData.modbusConfig.functions.length === 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Modbus Registers (comma-separated)
+                </label>
+                <input
+                  type="text"
+                  name="registers"
+                  value={formData.registers}
+                  onChange={handleChange}
+                  placeholder="e.g., 40001,40002,40003,40004,40005"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Use the "Add Function" button above for more advanced configuration with scaling.
+                </p>
               </div>
             )}
 
