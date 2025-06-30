@@ -5,8 +5,9 @@ import SafeIcon from '../common/SafeIcon';
 import { useGateway } from '../context/GatewayContext';
 import DeviceTemplates from './DeviceTemplates';
 import BACnetDiscovery from './BACnetDiscovery';
+import BACnetObjectBrowser from './BACnetObjectBrowser';
 
-const { FiX, FiSave, FiTemplate, FiPlus, FiTrash2, FiInfo, FiSearch } = FiIcons;
+const { FiX, FiSave, FiTemplate, FiPlus, FiTrash2, FiInfo, FiSearch, FiEye } = FiIcons;
 
 // Modbus function codes and their descriptions
 const MODBUS_FUNCTIONS = [
@@ -50,6 +51,7 @@ function DeviceModal({ isOpen, onClose, device }) {
   });
   const [showTemplates, setShowTemplates] = useState(false);
   const [showBACnetDiscovery, setShowBACnetDiscovery] = useState(false);
+  const [showBACnetObjectBrowser, setShowBACnetObjectBrowser] = useState(false);
   const [showModbusHelper, setShowModbusHelper] = useState(false);
 
   useEffect(() => {
@@ -100,7 +102,7 @@ function DeviceModal({ isOpen, onClose, device }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    
+
     // Validate required fields
     if (!formData.name || !formData.host || !formData.port) {
       alert('Please fill in all required fields (Name, Host, Port)');
@@ -153,7 +155,7 @@ function DeviceModal({ isOpen, onClose, device }) {
     } else {
       addDevice(deviceData);
     }
-    
+
     onClose();
   };
 
@@ -228,6 +230,27 @@ function DeviceModal({ isOpen, onClose, device }) {
     setShowBACnetDiscovery(false);
   };
 
+  const handleBACnetObjectsSelect = (selectedObjects) => {
+    console.log('BACnet objects selected:', selectedObjects);
+    
+    // Update object list in BACnet config
+    const updatedBACnetConfig = {
+      ...formData.bacnetConfig,
+      objectList: selectedObjects
+    };
+
+    // Generate registers string from selected objects
+    const registers = selectedObjects.map(obj => obj.instance).join(',');
+
+    setFormData(prev => ({
+      ...prev,
+      registers: registers,
+      bacnetConfig: updatedBACnetConfig
+    }));
+
+    setShowBACnetObjectBrowser(false);
+  };
+
   const addModbusFunction = () => {
     const newFunction = {
       id: Date.now(),
@@ -236,6 +259,7 @@ function DeviceModal({ isOpen, onClose, device }) {
       quantity: 1,
       name: 'Register'
     };
+
     handleModbusConfigChange('functions', [
       ...formData.modbusConfig.functions,
       newFunction
@@ -332,7 +356,10 @@ function DeviceModal({ isOpen, onClose, device }) {
                   )}
                 </>
               )}
-              <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600"
+              >
                 <SafeIcon icon={FiX} className="w-6 h-6" />
               </button>
             </div>
@@ -460,7 +487,20 @@ function DeviceModal({ isOpen, onClose, device }) {
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-gray-900">BACnet Configuration</h4>
+                  {formData.host && formData.port && (
+                    <motion.button
+                      type="button"
+                      whileHover={{ scale: 1.05 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => setShowBACnetObjectBrowser(true)}
+                      className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors font-medium"
+                    >
+                      <SafeIcon icon={FiEye} className="w-4 h-4" />
+                      <span>Browse Objects</span>
+                    </motion.button>
+                  )}
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -572,11 +612,43 @@ function DeviceModal({ isOpen, onClose, device }) {
                   onChange={handleChange}
                   placeholder={
                     formData.protocol === 'snmp' 
-                      ? 'e.g., 1.3.6.1.2.1.1.1.0, 1.3.6.1.2.1.1.3.0' 
-                      : 'e.g., 40001, 40002, 40003, 40004, 40005'
+                      ? 'e.g., 1.3.6.1.2.1.1.1.0,1.3.6.1.2.1.1.3.0'
+                      : 'e.g., 40001,40002,40003,40004,40005'
                   }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
+              </div>
+            )}
+
+            {/* BACnet Object IDs Configuration */}
+            {formData.protocol === 'bacnet' && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Object Instances (comma-separated)
+                  </label>
+                  {formData.host && formData.port && (
+                    <button
+                      type="button"
+                      onClick={() => setShowBACnetObjectBrowser(true)}
+                      className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
+                    >
+                      <SafeIcon icon={FiEye} className="w-4 h-4" />
+                      <span>Browse Objects</span>
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  name="registers"
+                  value={formData.registers}
+                  onChange={handleChange}
+                  placeholder="e.g., 0,1,2,3,4"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Object instances to read. Use "Browse Objects" button to discover available objects on the device.
+                </p>
               </div>
             )}
 
@@ -645,6 +717,14 @@ function DeviceModal({ isOpen, onClose, device }) {
         isOpen={showBACnetDiscovery}
         onClose={() => setShowBACnetDiscovery(false)}
         onDeviceSelect={handleBACnetDeviceSelect}
+      />
+
+      {/* BACnet Object Browser Modal */}
+      <BACnetObjectBrowser
+        isOpen={showBACnetObjectBrowser}
+        onClose={() => setShowBACnetObjectBrowser(false)}
+        device={formData}
+        onObjectsSelect={handleBACnetObjectsSelect}
       />
     </AnimatePresence>
   );

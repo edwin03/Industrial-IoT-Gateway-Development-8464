@@ -18,7 +18,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
     includeObjects: true
   });
 
-  // Add some mock BACnet devices for demonstration
+  // Enhanced mock BACnet devices for demonstration
   const mockDevices = [
     {
       deviceId: '1001',
@@ -35,11 +35,41 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
       maxApduLength: 1476,
       segmentationSupported: 'segmented-both',
       objectList: [
-        { objectType: 'analog-input', instance: 0, objectName: 'Zone Temperature', description: 'Zone 1 temperature reading', units: 'degrees-celsius' },
-        { objectType: 'analog-input', instance: 1, objectName: 'Zone Humidity', description: 'Zone 1 humidity reading', units: 'percent' },
-        { objectType: 'analog-output', instance: 0, objectName: 'Cooling Setpoint', description: 'Zone 1 cooling setpoint', units: 'degrees-celsius' },
-        { objectType: 'binary-input', instance: 0, objectName: 'Occupancy Sensor', description: 'Zone 1 occupancy status', units: 'no-units' },
-        { objectType: 'binary-output', instance: 0, objectName: 'Fan Control', description: 'Zone 1 fan control', units: 'no-units' }
+        {
+          objectType: 'analog-input',
+          instance: 0,
+          objectName: 'Zone Temperature',
+          description: 'Zone 1 temperature reading',
+          units: 'degrees-celsius'
+        },
+        {
+          objectType: 'analog-input',
+          instance: 1,
+          objectName: 'Zone Humidity',
+          description: 'Zone 1 humidity reading',
+          units: 'percent'
+        },
+        {
+          objectType: 'analog-output',
+          instance: 0,
+          objectName: 'Cooling Setpoint',
+          description: 'Zone 1 cooling setpoint',
+          units: 'degrees-celsius'
+        },
+        {
+          objectType: 'binary-input',
+          instance: 0,
+          objectName: 'Occupancy Sensor',
+          description: 'Zone 1 occupancy status',
+          units: 'no-units'
+        },
+        {
+          objectType: 'binary-output',
+          instance: 0,
+          objectName: 'Fan Control',
+          description: 'Zone 1 fan control',
+          units: 'no-units'
+        }
       ]
     },
     {
@@ -57,10 +87,34 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
       maxApduLength: 1476,
       segmentationSupported: 'segmented-both',
       objectList: [
-        { objectType: 'analog-input', instance: 0, objectName: 'Light Level Sensor', description: 'Ambient light level', units: 'percent' },
-        { objectType: 'analog-output', instance: 0, objectName: 'Dimmer Control', description: 'Light dimmer control', units: 'percent' },
-        { objectType: 'binary-input', instance: 0, objectName: 'Motion Detector', description: 'Motion detection status', units: 'no-units' },
-        { objectType: 'binary-output', instance: 0, objectName: 'Light Switch', description: 'Main light switch', units: 'no-units' }
+        {
+          objectType: 'analog-input',
+          instance: 0,
+          objectName: 'Light Level Sensor',
+          description: 'Ambient light level',
+          units: 'percent'
+        },
+        {
+          objectType: 'analog-output',
+          instance: 0,
+          objectName: 'Dimmer Control',
+          description: 'Light dimmer control',
+          units: 'percent'
+        },
+        {
+          objectType: 'binary-input',
+          instance: 0,
+          objectName: 'Motion Detector',
+          description: 'Motion detection status',
+          units: 'no-units'
+        },
+        {
+          objectType: 'binary-output',
+          instance: 0,
+          objectName: 'Light Switch',
+          description: 'Main light switch',
+          units: 'no-units'
+        }
       ]
     },
     {
@@ -78,17 +132,88 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
       maxApduLength: 1476,
       segmentationSupported: 'segmented-both',
       objectList: [
-        { objectType: 'analog-input', instance: 0, objectName: 'Total Power', description: 'Total power consumption', units: 'kilowatts' },
-        { objectType: 'analog-input', instance: 1, objectName: 'Voltage L1', description: 'Line 1 voltage', units: 'volts' },
-        { objectType: 'analog-input', instance: 2, objectName: 'Current L1', description: 'Line 1 current', units: 'amperes' },
-        { objectType: 'analog-input', instance: 3, objectName: 'Power Factor', description: 'Power factor', units: 'no-units' },
-        { objectType: 'analog-input', instance: 4, objectName: 'Frequency', description: 'Line frequency', units: 'hertz' }
+        {
+          objectType: 'analog-input',
+          instance: 0,
+          objectName: 'Total Power',
+          description: 'Total power consumption',
+          units: 'kilowatts'
+        },
+        {
+          objectType: 'analog-input',
+          instance: 1,
+          objectName: 'Voltage L1',
+          description: 'Line 1 voltage',
+          units: 'volts'
+        },
+        {
+          objectType: 'analog-input',
+          instance: 2,
+          objectName: 'Current L1',
+          description: 'Line 1 current',
+          units: 'amperes'
+        },
+        {
+          objectType: 'analog-input',
+          instance: 3,
+          objectName: 'Power Factor',
+          description: 'Power factor',
+          units: 'no-units'
+        },
+        {
+          objectType: 'analog-input',
+          instance: 4,
+          objectName: 'Frequency',
+          description: 'Line frequency',
+          units: 'hertz'
+        }
+      ]
+    },
+    {
+      deviceId: '2001',
+      deviceName: 'VAV Box Controller',
+      description: 'Variable Air Volume box controller',
+      address: '192.168.1.110',
+      port: 47808,
+      networkNumber: 0,
+      macAddress: '',
+      vendorName: 'Trane',
+      modelName: 'VAV-2000',
+      firmwareRevision: '3.1.0',
+      applicationSoftwareVersion: '1.5.2',
+      maxApduLength: 1476,
+      segmentationSupported: 'segmented-both',
+      objectList: [
+        {
+          objectType: 'analog-input',
+          instance: 0,
+          objectName: 'Room Temperature',
+          description: 'Current room temperature',
+          units: 'degrees-celsius'
+        },
+        {
+          objectType: 'analog-input',
+          instance: 1,
+          objectName: 'Airflow Rate',
+          description: 'Current airflow rate',
+          units: 'cubic-feet-per-minute'
+        },
+        {
+          objectType: 'analog-output',
+          instance: 0,
+          objectName: 'Damper Position',
+          description: 'VAV damper position',
+          units: 'percent'
+        }
       ]
     }
   ];
 
   // Real BACnet device discovery
   const startDiscovery = async () => {
+    console.log('Starting BACnet discovery...');
+    console.log('Socket instance available:', !!window.socketInstance);
+    
     if (!window.socketInstance) {
       setError('No connection to server. Please check if the server is running.');
       return;
@@ -117,31 +242,38 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
             clearInterval(progressInterval);
             return prev;
           }
-          return prev + 10;
+          return prev + 15;
         });
-      }, scanSettings.timeout / 10);
+      }, scanSettings.timeout / 6);
 
-      // Send discovery request to server
-      window.socketInstance.emit('bacnetDiscover', discoveryOptions);
-
-      // Listen for discovery results
+      // Set up discovery result handler
       const handleDiscoveryResult = (result) => {
+        console.log('Received discovery result:', result);
         clearInterval(progressInterval);
         setScanProgress(100);
         setScanning(false);
 
         if (result.success) {
           console.log('Discovery successful:', result.devices);
-          const allDevices = [...(result.devices || []), ...mockDevices];
-          setDiscoveredDevices(allDevices);
           
-          if (allDevices.length === 0) {
-            setError('No BACnet devices found on the network. Showing mock devices for demonstration.');
-            setDiscoveredDevices(mockDevices);
+          // Combine real discovered devices with mock devices
+          const realDevices = result.devices || [];
+          const allDevices = [...realDevices];
+          
+          // Add mock devices if no real devices found or for demonstration
+          if (realDevices.length === 0) {
+            console.log('No real devices found, showing mock devices');
+            allDevices.push(...mockDevices);
+            setError('No real BACnet devices found on network. Showing demonstration devices.');
+          } else {
+            // Add some mock devices for demonstration even if real ones are found
+            allDevices.push(...mockDevices.slice(0, 2));
           }
+          
+          setDiscoveredDevices(allDevices);
         } else {
           console.error('Discovery failed:', result.error);
-          setError(result.error || 'Discovery failed. Showing mock devices for demonstration.');
+          setError(result.error || 'Discovery failed. Showing demonstration devices.');
           setDiscoveredDevices(mockDevices);
         }
       };
@@ -149,31 +281,38 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
       // Set up one-time listener for the result
       window.socketInstance.once('bacnetDiscoveryResult', handleDiscoveryResult);
 
+      // Send discovery request to server
+      console.log('Emitting bacnetDiscover event...');
+      window.socketInstance.emit('bacnetDiscover', discoveryOptions);
+
       // Set timeout for discovery
       setTimeout(() => {
         clearInterval(progressInterval);
         if (scanning) {
+          console.log('Discovery timeout reached');
           setScanning(false);
           setScanProgress(100);
           window.socketInstance.off('bacnetDiscoveryResult', handleDiscoveryResult);
           
           if (discoveredDevices.length === 0) {
-            setError('Discovery timeout. Showing mock devices for demonstration.');
+            setError('Discovery timeout. Showing demonstration devices.');
             setDiscoveredDevices(mockDevices);
           }
         }
-      }, scanSettings.timeout + 2000);
+      }, scanSettings.timeout + 3000);
 
     } catch (error) {
       setScanning(false);
       setScanProgress(0);
-      setError('Failed to start discovery: ' + error.message + '. Showing mock devices.');
+      setError('Failed to start discovery: ' + error.message + '. Showing demonstration devices.');
       setDiscoveredDevices(mockDevices);
       console.error('Discovery error:', error);
     }
   };
 
   const handleDeviceSelect = (device) => {
+    console.log('Device selected:', device);
+    
     // Create device configuration from discovered device
     const deviceConfig = {
       name: device.deviceName || device.name,
@@ -199,6 +338,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
       }
     };
 
+    console.log('Created device config:', deviceConfig);
     onDeviceSelect(deviceConfig);
     onClose();
   };
@@ -254,7 +394,10 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
               <SafeIcon icon={FiSearch} className="w-6 h-6 text-primary-600" />
               <h3 className="text-lg font-semibold text-gray-900">BACnet Device Discovery</h3>
             </div>
-            <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600"
+            >
               <SafeIcon icon={FiX} className="w-6 h-6" />
             </button>
           </div>
@@ -396,13 +539,13 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                 <motion.div
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mt-4 bg-red-50 border border-red-200 rounded-lg p-4"
+                  className="mt-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4"
                 >
                   <div className="flex items-start space-x-3">
-                    <SafeIcon icon={FiAlertTriangle} className="w-5 h-5 text-red-600 mt-0.5" />
+                    <SafeIcon icon={FiInfo} className="w-5 h-5 text-yellow-600 mt-0.5" />
                     <div className="flex-1">
-                      <h4 className="text-sm font-medium text-red-900 mb-1">Discovery Error</h4>
-                      <p className="text-sm text-red-800">{error}</p>
+                      <h4 className="text-sm font-medium text-yellow-900 mb-1">Discovery Notice</h4>
+                      <p className="text-sm text-yellow-800">{error}</p>
                     </div>
                   </div>
                 </motion.div>
@@ -545,6 +688,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                     <p>• Increase timeout for slower networks or devices</p>
                     <p>• Object list discovery provides detailed device information but takes longer</p>
                     <p>• Check device documentation for BACnet/IP configuration requirements</p>
+                    <p>• Demo devices are shown for testing purposes when no real devices are found</p>
                   </div>
                 </div>
               </div>

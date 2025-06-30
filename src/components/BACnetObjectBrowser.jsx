@@ -1,0 +1,580 @@
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import * as FiIcons from 'react-icons/fi';
+import SafeIcon from '../common/SafeIcon';
+
+const { FiX, FiRefreshCw, FiEye, FiPlus, FiInfo, FiSearch, FiFilter, FiDownload } = FiIcons;
+
+// BACnet object type mappings
+const BACNET_OBJECT_TYPES = {
+  0: 'analog-input',
+  1: 'analog-output',
+  2: 'analog-value',
+  3: 'binary-input',
+  4: 'binary-output',
+  5: 'binary-value',
+  8: 'device',
+  13: 'multi-state-input',
+  14: 'multi-state-output',
+  19: 'multi-state-value',
+  20: 'notification-class',
+  21: 'program',
+  23: 'schedule',
+  25: 'structured-view',
+  30: 'trend-log'
+};
+
+const OBJECT_TYPE_ICONS = {
+  'analog-input': '📊',
+  'analog-output': '📈',
+  'analog-value': '📉',
+  'binary-input': '🔘',
+  'binary-output': '🔴',
+  'binary-value': '⚫',
+  'multi-state-input': '🎛️',
+  'multi-state-output': '🎮',
+  'multi-state-value': '🎯',
+  'device': '💻',
+  'notification-class': '🔔',
+  'program': '⚙️',
+  'schedule': '📅',
+  'structured-view': '📋',
+  'trend-log': '📈',
+  'default': '📄'
+};
+
+function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
+  const [objectList, setObjectList] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedObjects, setSelectedObjects] = useState([]);
+  const [filterType, setFilterType] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    if (isOpen && device) {
+      loadObjectList();
+    }
+  }, [isOpen, device]);
+
+  const loadObjectList = async () => {
+    if (!device) return;
+    
+    setLoading(true);
+    setError('');
+    
+    try {
+      console.log('Loading object list for device:', device);
+      
+      if (window.socketInstance) {
+        // Request object list from server
+        window.socketInstance.emit('getBacnetObjectList', {
+          deviceId: device.deviceId,
+          address: device.host,
+          port: parseInt(device.port),
+          networkNumber: device.bacnetConfig?.networkNumber || 0,
+          timeout: 10000
+        });
+
+        // Listen for response
+        const handleObjectListResponse = (response) => {
+          console.log('Received object list response:', response);
+          setLoading(false);
+          
+          if (response.success) {
+            setObjectList(response.objects || []);
+            if (response.objects.length === 0) {
+              setError('No objects found on device. Device may not support object enumeration.');
+            }
+          } else {
+            setError(response.error || 'Failed to read object list');
+            // Fallback to demo objects
+            setObjectList(generateDemoObjects());
+          }
+        };
+
+        window.socketInstance.once('bacnetObjectListResponse', handleObjectListResponse);
+
+        // Set timeout
+        setTimeout(() => {
+          if (loading) {
+            window.socketInstance.off('bacnetObjectListResponse', handleObjectListResponse);
+            setLoading(false);
+            setError('Request timeout. Showing demonstration objects.');
+            setObjectList(generateDemoObjects());
+          }
+        }, 12000);
+
+      } else {
+        // No socket connection, show demo objects
+        setError('No server connection. Showing demonstration objects.');
+        setObjectList(generateDemoObjects());
+        setLoading(false);
+      }
+    } catch (error) {
+      console.error('Error loading object list:', error);
+      setError('Error loading object list: ' + error.message);
+      setObjectList(generateDemoObjects());
+      setLoading(false);
+    }
+  };
+
+  const generateDemoObjects = () => {
+    return [
+      {
+        objectType: 'analog-input',
+        instance: 0,
+        objectName: 'Zone Temperature',
+        description: 'Zone 1 temperature reading',
+        units: 'degrees-celsius',
+        presentValue: 22.5,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'analog-input',
+        instance: 1,
+        objectName: 'Zone Humidity',
+        description: 'Zone 1 humidity reading',
+        units: 'percent',
+        presentValue: 45.2,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'analog-input',
+        instance: 2,
+        objectName: 'Supply Air Pressure',
+        description: 'Supply air pressure sensor',
+        units: 'pascals',
+        presentValue: 1013.25,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'analog-output',
+        instance: 0,
+        objectName: 'Cooling Setpoint',
+        description: 'Zone cooling setpoint control',
+        units: 'degrees-celsius',
+        presentValue: 24.0,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'analog-output',
+        instance: 1,
+        objectName: 'Heating Setpoint',
+        description: 'Zone heating setpoint control',
+        units: 'degrees-celsius',
+        presentValue: 20.0,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'binary-input',
+        instance: 0,
+        objectName: 'Occupancy Sensor',
+        description: 'Zone occupancy detection',
+        units: 'no-units',
+        presentValue: 1,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'binary-input',
+        instance: 1,
+        objectName: 'Window Contact',
+        description: 'Window open/close status',
+        units: 'no-units',
+        presentValue: 0,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'binary-output',
+        instance: 0,
+        objectName: 'Fan Control',
+        description: 'Supply fan on/off control',
+        units: 'no-units',
+        presentValue: 1,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'binary-output',
+        instance: 1,
+        objectName: 'Damper Control',
+        description: 'Supply damper open/close',
+        units: 'no-units',
+        presentValue: 1,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'multi-state-input',
+        instance: 0,
+        objectName: 'System Mode',
+        description: 'HVAC system operating mode',
+        units: 'no-units',
+        presentValue: 2,
+        reliability: 'no-fault-detected',
+        stateText: ['Off', 'Heat', 'Cool', 'Auto']
+      }
+    ];
+  };
+
+  const handleObjectToggle = (object) => {
+    setSelectedObjects(prev => {
+      const isSelected = prev.some(obj => obj.instance === object.instance && obj.objectType === object.objectType);
+      if (isSelected) {
+        return prev.filter(obj => !(obj.instance === object.instance && obj.objectType === object.objectType));
+      } else {
+        return [...prev, object];
+      }
+    });
+  };
+
+  const handleSelectAll = () => {
+    const filtered = getFilteredObjects();
+    setSelectedObjects(filtered);
+  };
+
+  const handleDeselectAll = () => {
+    setSelectedObjects([]);
+  };
+
+  const getFilteredObjects = () => {
+    return objectList.filter(obj => {
+      const matchesType = filterType === 'all' || obj.objectType === filterType;
+      const matchesSearch = obj.objectName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                          obj.description?.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesType && matchesSearch;
+    });
+  };
+
+  const getObjectIcon = (objectType) => {
+    return OBJECT_TYPE_ICONS[objectType] || OBJECT_TYPE_ICONS.default;
+  };
+
+  const getObjectTypeColor = (objectType) => {
+    const colors = {
+      'analog-input': 'bg-blue-100 text-blue-800',
+      'analog-output': 'bg-green-100 text-green-800',
+      'analog-value': 'bg-purple-100 text-purple-800',
+      'binary-input': 'bg-orange-100 text-orange-800',
+      'binary-output': 'bg-red-100 text-red-800',
+      'binary-value': 'bg-pink-100 text-pink-800',
+      'multi-state-input': 'bg-yellow-100 text-yellow-800',
+      'multi-state-output': 'bg-indigo-100 text-indigo-800',
+      'multi-state-value': 'bg-teal-100 text-teal-800',
+      'device': 'bg-gray-100 text-gray-800'
+    };
+    return colors[objectType] || 'bg-gray-100 text-gray-800';
+  };
+
+  const handleUseSelected = () => {
+    if (selectedObjects.length === 0) {
+      alert('Please select at least one object.');
+      return;
+    }
+    
+    onObjectsSelect(selectedObjects);
+    onClose();
+  };
+
+  const exportObjectList = () => {
+    const exportData = {
+      device: {
+        name: device.name,
+        deviceId: device.deviceId,
+        address: device.host,
+        port: device.port
+      },
+      objectList: objectList,
+      exportedAt: new Date().toISOString()
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${device.name.replace(/\s+/g, '_')}_objects.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const uniqueObjectTypes = [...new Set(objectList.map(obj => obj.objectType))];
+  const filteredObjects = getFilteredObjects();
+
+  if (!isOpen) return null;
+
+  return (
+    <AnimatePresence>
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+        onClick={onClose}
+      >
+        <motion.div
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
+          className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 max-h-[90vh] overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center space-x-3">
+              <SafeIcon icon={FiEye} className="w-6 h-6 text-primary-600" />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">BACnet Object Browser</h3>
+                <p className="text-sm text-gray-600">{device?.name} - {device?.host}:{device?.port}</p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {!loading && objectList.length > 0 && (
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={exportObjectList}
+                  className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-gray-200 transition-colors text-sm"
+                >
+                  <SafeIcon icon={FiDownload} className="w-4 h-4" />
+                  <span>Export</span>
+                </motion.button>
+              )}
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={loadObjectList}
+                disabled={loading}
+                className="bg-primary-100 text-primary-700 px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-primary-200 transition-colors text-sm disabled:opacity-50"
+              >
+                <SafeIcon icon={FiRefreshCw} className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                <span>Refresh</span>
+              </motion.button>
+              <button
+                onClick={onClose}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <SafeIcon icon={FiX} className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+
+          <div className="p-6">
+            {/* Loading State */}
+            {loading && (
+              <div className="text-center py-12">
+                <SafeIcon icon={FiRefreshCw} className="w-8 h-8 mx-auto mb-4 animate-spin text-primary-600" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">Reading Object List</h3>
+                <p className="text-gray-600">Discovering available objects on the BACnet device...</p>
+              </div>
+            )}
+
+            {/* Error State */}
+            {error && (
+              <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <SafeIcon icon={FiInfo} className="w-5 h-5 text-yellow-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-yellow-900 mb-1">Discovery Notice</h4>
+                    <p className="text-sm text-yellow-800">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Filters and Search */}
+            {!loading && objectList.length > 0 && (
+              <div className="mb-6">
+                <div className="flex flex-col md:flex-row gap-4 mb-4">
+                  <div className="flex-1">
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <SafeIcon icon={FiSearch} className="w-5 h-5 text-gray-400" />
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Search objects by name or description..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center space-x-2">
+                      <SafeIcon icon={FiFilter} className="w-4 h-4 text-gray-500" />
+                      <select
+                        value={filterType}
+                        onChange={(e) => setFilterType(e.target.value)}
+                        className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      >
+                        <option value="all">All Types</option>
+                        {uniqueObjectTypes.map(type => (
+                          <option key={type} value={type}>
+                            {type.replace('-', ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Selection Controls */}
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    {selectedObjects.length} of {filteredObjects.length} objects selected
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={handleSelectAll}
+                      className="text-sm text-primary-600 hover:text-primary-800"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      onClick={handleDeselectAll}
+                      className="text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Deselect All
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Object List */}
+            {!loading && objectList.length > 0 && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 max-h-96 overflow-y-auto">
+                  {filteredObjects.map((object, index) => {
+                    const isSelected = selectedObjects.some(obj => 
+                      obj.instance === object.instance && obj.objectType === object.objectType
+                    );
+
+                    return (
+                      <motion.div
+                        key={`${object.objectType}-${object.instance}`}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className={`border rounded-lg p-4 cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'border-primary-500 bg-primary-50' 
+                            : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                        }`}
+                        onClick={() => handleObjectToggle(object)}
+                      >
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center space-x-3">
+                            <span className="text-2xl">{getObjectIcon(object.objectType)}</span>
+                            <div className="flex-1">
+                              <h5 className="font-semibold text-gray-900">{object.objectName}</h5>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getObjectTypeColor(object.objectType)}`}>
+                                  {object.objectType.replace('-', ' ')}
+                                </span>
+                                <span className="text-xs text-gray-500">Instance: {object.instance}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleObjectToggle(object)}
+                            className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                          />
+                        </div>
+
+                        {object.description && (
+                          <p className="text-sm text-gray-600 mb-2">{object.description}</p>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          {object.presentValue !== undefined && (
+                            <div>
+                              <span className="text-gray-500">Present Value:</span>
+                              <div className="font-medium">
+                                {typeof object.presentValue === 'number' ? 
+                                  object.presentValue.toFixed(2) : 
+                                  object.presentValue?.toString()
+                                }
+                                {object.units && object.units !== 'no-units' && (
+                                  <span className="text-gray-500 ml-1">
+                                    {object.units.replace('-', ' ')}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {object.reliability && (
+                            <div>
+                              <span className="text-gray-500">Reliability:</span>
+                              <div className="font-medium text-green-600">
+                                {object.reliability.replace('-', ' ')}
+                              </div>
+                            </div>
+                          )}
+
+                          {object.stateText && (
+                            <div className="col-span-2">
+                              <span className="text-gray-500">States:</span>
+                              <div className="font-medium">
+                                {object.stateText.join(', ')}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end space-x-3 pt-4 border-t">
+                  <button
+                    onClick={onClose}
+                    className="px-4 py-2 text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={handleUseSelected}
+                    disabled={selectedObjects.length === 0}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <SafeIcon icon={FiPlus} className="w-4 h-4" />
+                    <span>Use Selected ({selectedObjects.length})</span>
+                  </motion.button>
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {!loading && objectList.length === 0 && !error && (
+              <div className="text-center py-12">
+                <SafeIcon icon={FiEye} className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">No Objects Found</h3>
+                <p className="text-gray-600 mb-4">
+                  No objects were discovered on this BACnet device.
+                </p>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={loadObjectList}
+                  className="bg-primary-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors mx-auto"
+                >
+                  <SafeIcon icon={FiRefreshCw} className="w-4 h-4" />
+                  <span>Try Again</span>
+                </motion.button>
+              </div>
+            )}
+          </div>
+        </motion.div>
+      </motion.div>
+    </AnimatePresence>
+  );
+}
+
+export default BACnetObjectBrowser;

@@ -90,7 +90,6 @@ function addLog(level, message, device = null) {
     message,
     device
   };
-  
   logs.unshift(log);
   if (logs.length > 1000) logs.pop();
 
@@ -113,7 +112,7 @@ function initializeMQTT() {
 
     const mqttUrl = `mqtt://${settings.mqtt.broker}:${settings.mqtt.port}`;
     const options = {};
-    
+
     if (settings.mqtt.username) {
       options.username = settings.mqtt.username;
       options.password = settings.mqtt.password;
@@ -130,7 +129,6 @@ function initializeMQTT() {
       console.error('MQTT connection error:', error);
       addLog('error', `MQTT connection error: ${error.message}`, 'System');
     });
-
   } catch (error) {
     console.error('Failed to initialize MQTT:', error);
     addLog('error', `Failed to initialize MQTT: ${error.message}`, 'System');
@@ -140,7 +138,6 @@ function initializeMQTT() {
 // Enhanced Modbus TCP handler with multiple function support
 async function readModbusDevice(device) {
   const client = new ModbusRTU();
-  
   try {
     await client.connectTCP(device.host, { port: parseInt(device.port) });
     client.setID(parseInt(device.deviceId) || 1);
@@ -165,7 +162,7 @@ async function readModbusDevice(device) {
                 data[`${funcName}_coil_${startAddr + i}`] = result.data[i] ? 1 : 0;
               }
               break;
-            case 2: // Read Discrete Inputs  
+            case 2: // Read Discrete Inputs
               result = await client.readDiscreteInputs(startAddr - 10001, quantity);
               for (let i = 0; i < result.data.length; i++) {
                 data[`${funcName}_input_${startAddr + i}`] = result.data[i] ? 1 : 0;
@@ -194,7 +191,6 @@ async function readModbusDevice(device) {
     } else {
       // Use legacy register-based approach for backward compatibility
       const registers = device.registers.split(',').map(r => parseInt(r.trim()));
-      
       for (const register of registers) {
         try {
           const result = await client.readHoldingRegisters(register - 40001, 1);
@@ -208,7 +204,6 @@ async function readModbusDevice(device) {
 
     client.close();
     return data;
-
   } catch (error) {
     client.close();
     throw error;
@@ -252,7 +247,6 @@ async function readBACnetDevice(device) {
 // Device polling
 async function pollDevice(device) {
   const previousStatus = device.status;
-  
   try {
     let data = {};
 
@@ -298,7 +292,6 @@ async function pollDevice(device) {
         timestamp: device.lastUpdated,
         data
       };
-
       mqttClient.publish(topic, JSON.stringify(payload));
       stats.messagesProcessed++;
     }
@@ -309,7 +302,6 @@ async function pollDevice(device) {
     }
 
     addLog('info', `Successfully polled device: ${device.name}`, device.name);
-
   } catch (error) {
     const newStatus = 'error';
     device.status = newStatus;
@@ -327,9 +319,7 @@ async function pollDevice(device) {
 
     // Send email notifications for device errors/offline
     if (emailService.isConfigured()) {
-      const notificationType = error.message.includes('timeout') || error.message.includes('connect') ? 
-        'deviceOffline' : 'deviceError';
-      
+      const notificationType = error.message.includes('timeout') || error.message.includes('connect') ? 'deviceOffline' : 'deviceError';
       emailService.sendDeviceNotification(device, notificationType, { error: error.message })
         .catch(err => console.error('Failed to send device error notification:', err));
     }
@@ -342,14 +332,12 @@ async function pollDevice(device) {
 // Start polling for a device
 function startDevicePolling(device) {
   stopDevicePolling(device.id);
-  
   const interval = device.pollInterval || settings.polling.interval;
   const pollerId = setInterval(() => {
     pollDevice(device);
   }, interval);
-  
   devicePollers.set(device.id, pollerId);
-  
+
   // Initial poll after 2 seconds
   setTimeout(() => pollDevice(device), 2000);
 }
@@ -409,16 +397,22 @@ io.on('connection', (socket) => {
     try {
       addLog('info', 'Starting BACnet device discovery', 'BACnet');
       const discoveredDevices = await bacnetClient.discoverDevices(options);
-      socket.emit('bacnetDiscoveryResult', {
-        success: true,
-        devices: discoveredDevices
-      });
+      socket.emit('bacnetDiscoveryResult', { success: true, devices: discoveredDevices });
     } catch (error) {
       addLog('error', `BACnet discovery failed: ${error.message}`, 'BACnet');
-      socket.emit('bacnetDiscoveryResult', {
-        success: false,
-        error: error.message
-      });
+      socket.emit('bacnetDiscoveryResult', { success: false, error: error.message });
+    }
+  });
+
+  // BACnet Object List handler
+  socket.on('getBacnetObjectList', async (deviceConfig) => {
+    try {
+      addLog('info', `Reading BACnet object list from ${deviceConfig.address}`, 'BACnet');
+      const objectList = await bacnetClient.readObjectList(deviceConfig);
+      socket.emit('bacnetObjectListResponse', { success: true, objects: objectList });
+    } catch (error) {
+      addLog('error', `Failed to read BACnet object list: ${error.message}`, 'BACnet');
+      socket.emit('bacnetObjectListResponse', { success: false, error: error.message });
     }
   });
 
@@ -458,14 +452,13 @@ io.on('connection', (socket) => {
     try {
       console.log('Testing email connection...');
       addLog('info', 'Email connection test requested', 'Email Service');
-      
       const currentEmailSettings = settings.email;
       console.log('Current email settings:', JSON.stringify(currentEmailSettings, null, 2));
       
       emailService.configure(currentEmailSettings, addLog);
       const result = await emailService.testConnection();
-      
       console.log('Email test result:', result);
+      
       addLog('success', 'Email connection test successful', 'Email Service');
       socket.emit('emailTestResult', result);
     } catch (error) {
@@ -479,18 +472,14 @@ io.on('connection', (socket) => {
     try {
       console.log('Sending test email to:', recipient);
       addLog('info', `Test email requested for: ${recipient}`, 'Email Service');
-      
       const currentEmailSettings = settings.email;
+      
       emailService.configure(currentEmailSettings, addLog);
       const result = await emailService.sendTestEmail(recipient);
-      
       console.log('Test email sent:', result);
+      
       addLog('success', `Test email sent to ${recipient}`, 'Email Service');
-      socket.emit('emailTestResult', {
-        success: true,
-        message: 'Test email sent successfully',
-        messageId: result.messageId
-      });
+      socket.emit('emailTestResult', { success: true, message: 'Test email sent successfully', messageId: result.messageId });
     } catch (error) {
       console.error('Failed to send test email:', error);
       addLog('error', `Failed to send test email: ${error.message}`, 'Email Service');
@@ -507,11 +496,9 @@ io.on('connection', (socket) => {
       lastError: null,
       lastData: null
     };
-
     devices.push(newDevice);
     startDevicePolling(newDevice);
     updateStats();
-
     addLog('info', `Device added: ${newDevice.name}`, newDevice.name);
     io.emit('devicesUpdate', devices);
   });
@@ -520,7 +507,6 @@ io.on('connection', (socket) => {
     const index = devices.findIndex(d => d.id === updatedDevice.id);
     if (index !== -1) {
       stopDevicePolling(updatedDevice.id);
-      
       devices[index] = {
         ...updatedDevice,
         status: devices[index].status,
@@ -528,10 +514,8 @@ io.on('connection', (socket) => {
         lastError: devices[index].lastError,
         lastData: devices[index].lastData
       };
-      
       startDevicePolling(devices[index]);
       updateStats();
-
       addLog('info', `Device updated: ${updatedDevice.name}`, updatedDevice.name);
       io.emit('devicesUpdate', devices);
     }
@@ -544,7 +528,6 @@ io.on('connection', (socket) => {
       stopDevicePolling(deviceId);
       devices.splice(deviceIndex, 1);
       updateStats();
-
       addLog('info', `Device deleted: ${device.name}`, device.name);
       io.emit('devicesUpdate', devices);
     }
@@ -560,8 +543,7 @@ io.on('connection', (socket) => {
     initializeMQTT();
 
     // Handle Modbus slave server changes
-    if (settings.modbusSlave.enabled !== oldModbusSlaveEnabled || 
-        (settings.modbusSlave.enabled && newSettings.modbusSlave)) {
+    if (settings.modbusSlave.enabled !== oldModbusSlaveEnabled || (settings.modbusSlave.enabled && newSettings.modbusSlave)) {
       try {
         if (settings.modbusSlave.enabled) {
           await modbusSlaveServer.start(settings.modbusSlave, addLog);
@@ -625,23 +607,23 @@ server.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down gateway...');
-  
+
   // Flush all history buffers before shutdown
   dataHistoryManager.flushAllBuffers();
-  
+
   // Stop all device pollers
   devicePollers.forEach((pollerId) => {
     clearInterval(pollerId);
   });
-  
+
   // Close MQTT connection
   if (mqttClient) {
     mqttClient.end();
   }
-  
+
   // Stop Modbus slave server
   await modbusSlaveServer.stop();
-  
+
   // Close server
   server.close(() => {
     console.log('Gateway server stopped');
