@@ -6,6 +6,7 @@ import mqtt from 'mqtt';
 import ModbusRTU from 'modbus-serial';
 import snmp from 'net-snmp';
 import ModbusSlaveServer from './modbusSlaveServer.js';
+import BACnetClient from './bacnetClient.js';
 import EmailService from './emailService.js';
 import AlarmProcessor from './alarmProcessor.js';
 import DataHistoryManager from './dataHistoryManager.js';
@@ -74,6 +75,7 @@ let stats = {
 
 // Initialize services
 const modbusSlaveServer = new ModbusSlaveServer();
+const bacnetClient = new BACnetClient();
 const emailService = new EmailService();
 const alarmProcessor = new AlarmProcessor();
 const dataHistoryManager = new DataHistoryManager();
@@ -87,12 +89,13 @@ function addLog(level, message, device = null) {
     message,
     device
   };
+  
   logs.unshift(log);
   if (logs.length > 1000) logs.pop();
-
+  
   // Broadcast to connected clients
   io.emit('newLog', log);
-
+  
   // Send email notification for system errors
   if (level === 'error' && device === 'System') {
     emailService.sendSystemNotification('systemErrors', message, {
@@ -110,6 +113,7 @@ function initializeMQTT() {
 
     const mqttUrl = `mqtt://${settings.mqtt.broker}:${settings.mqtt.port}`;
     const options = {};
+
     if (settings.mqtt.username) {
       options.username = settings.mqtt.username;
       options.password = settings.mqtt.password;
@@ -183,6 +187,17 @@ function initializeDataHistoryManager() {
   }
 }
 
+// Initialize BACnet Client
+function initializeBACnetClient() {
+  try {
+    bacnetClient.initialize(addLog);
+    addLog('info', 'BACnet client initialized', 'System');
+  } catch (error) {
+    console.error('Failed to initialize BACnet client:', error);
+    addLog('error', `Failed to initialize BACnet client: ${error.message}`, 'System');
+  }
+}
+
 // Enhanced Modbus TCP handler with multiple function support
 async function readModbusDevice(device) {
   const client = new ModbusRTU();
@@ -211,7 +226,7 @@ async function readModbusDevice(device) {
               }
               break;
 
-            case 2: // Read Discrete Inputs
+            case 2: // Read Discrete Inputs  
               result = await client.readDiscreteInputs(startAddr - 10001, quantity);
               for (let i = 0; i < result.data.length; i++) {
                 data[`${funcName}_input_${startAddr + i}`] = result.data[i] ? 1 : 0;
@@ -291,29 +306,15 @@ async function readSNMPDevice(device) {
   });
 }
 
-// BACnet handler (simplified simulation for now)
+// BACnet handler with discovery integration
 async function readBACnetDevice(device) {
-  return new Promise((resolve, reject) => {
-    try {
-      const objectIds = device.registers.split(',').map(id => parseInt(id.trim()));
-      const data = {};
-
-      objectIds.forEach(objectId => {
-        data[`object_${objectId}`] = Math.random() * 100;
-      });
-
-      setTimeout(() => {
-        resolve(data);
-      }, Math.random() * 1000 + 500);
-    } catch (error) {
-      reject(error);
-    }
-  });
+  return await bacnetClient.readDevice(device);
 }
 
 // Device polling
 async function pollDevice(device) {
   const previousStatus = device.status;
+  
   try {
     let data = {};
 
@@ -359,6 +360,7 @@ async function pollDevice(device) {
         timestamp: device.lastUpdated,
         data
       };
+
       mqttClient.publish(topic, JSON.stringify(payload));
       stats.messagesProcessed++;
     }
@@ -389,6 +391,7 @@ async function pollDevice(device) {
       const notificationType = error.message.includes('timeout') || error.message.includes('connect') 
         ? 'deviceOffline' 
         : 'deviceError';
+      
       emailService.sendDeviceNotification(device, notificationType, { error: error.message })
         .catch(err => console.error('Failed to send device error notification:', err));
     }
@@ -401,12 +404,14 @@ async function pollDevice(device) {
 // Start polling for a device
 function startDevicePolling(device) {
   stopDevicePolling(device.id);
+  
   const interval = device.pollInterval || settings.polling.interval;
   const pollerId = setInterval(() => {
     pollDevice(device);
   }, interval);
+  
   devicePollers.set(device.id, pollerId);
-
+  
   // Initial poll after 2 seconds
   setTimeout(() => pollDevice(device), 2000);
 }
@@ -486,6 +491,18 @@ io.on('connection', (socket) => {
     socket.emit('modbusSlaveInfo', info);
   });
 
+  // BACnet Discovery handlers
+  socket.on('bacnetDiscover', async (options) => {
+    try {
+      addLog('info', 'Starting BACnet device discovery', 'BACnet');
+      const discoveredDevices = await bacnetClient.discoverDevices(options);
+      socket.emit('bacnetDiscoveryResult', { success: true, devices: discoveredDevices });
+    } catch (error) {
+      addLog('error', `BACnet discovery failed: ${error.message}`, 'BACnet');
+      socket.emit('bacnetDiscoveryResult', { success: false, error: error.message });
+    }
+  });
+
   // Alarm handlers
   socket.on('updateAlarms', (alarms) => {
     alarmProcessor.updateAlarms(alarms);
@@ -528,8 +545,8 @@ io.on('connection', (socket) => {
       
       emailService.configure(currentEmailSettings, addLog);
       const result = await emailService.testConnection();
-      
       console.log('Email test result:', result);
+      
       addLog('success', 'Email connection test successful', 'Email Service');
       socket.emit('emailTestResult', result);
     } catch (error) {
@@ -547,8 +564,8 @@ io.on('connection', (socket) => {
       const currentEmailSettings = settings.email;
       emailService.configure(currentEmailSettings, addLog);
       const result = await emailService.sendTestEmail(recipient);
-      
       console.log('Test email sent:', result);
+      
       addLog('success', `Test email sent to ${recipient}`, 'Email Service');
       socket.emit('emailTestResult', { 
         success: true, 
@@ -571,9 +588,11 @@ io.on('connection', (socket) => {
       lastError: null,
       lastData: null
     };
+
     devices.push(newDevice);
     startDevicePolling(newDevice);
     updateStats();
+
     addLog('info', `Device added: ${newDevice.name}`, newDevice.name);
     io.emit('devicesUpdate', devices);
   });
@@ -582,6 +601,7 @@ io.on('connection', (socket) => {
     const index = devices.findIndex(d => d.id === updatedDevice.id);
     if (index !== -1) {
       stopDevicePolling(updatedDevice.id);
+      
       devices[index] = {
         ...updatedDevice,
         status: devices[index].status,
@@ -589,8 +609,10 @@ io.on('connection', (socket) => {
         lastError: devices[index].lastError,
         lastData: devices[index].lastData
       };
+
       startDevicePolling(devices[index]);
       updateStats();
+
       addLog('info', `Device updated: ${updatedDevice.name}`, updatedDevice.name);
       io.emit('devicesUpdate', devices);
     }
@@ -603,6 +625,7 @@ io.on('connection', (socket) => {
       stopDevicePolling(deviceId);
       devices.splice(deviceIndex, 1);
       updateStats();
+
       addLog('info', `Device deleted: ${device.name}`, device.name);
       io.emit('devicesUpdate', devices);
     }
@@ -611,10 +634,10 @@ io.on('connection', (socket) => {
   socket.on('updateSettings', async (newSettings) => {
     const oldModbusSlaveEnabled = settings.modbusSlave.enabled;
     const oldEmailSettings = JSON.stringify(settings.email);
-    
+
     settings = { ...settings, ...newSettings };
     console.log('Settings updated:', JSON.stringify(newSettings, null, 2));
-    
+
     initializeMQTT();
 
     // Handle Modbus slave server changes
@@ -648,6 +671,7 @@ initializeMQTT();
 initializeEmailService();
 initializeAlarmProcessor();
 initializeDataHistoryManager();
+initializeBACnetClient();
 scheduleDailySummary();
 
 // Update stats every 10 seconds
@@ -685,15 +709,15 @@ process.on('SIGINT', async () => {
   devicePollers.forEach((pollerId) => {
     clearInterval(pollerId);
   });
-
+  
   // Close MQTT connection
   if (mqttClient) {
     mqttClient.end();
   }
-
+  
   // Stop Modbus slave server
   await modbusSlaveServer.stop();
-
+  
   // Close server
   server.close(() => {
     console.log('Gateway server stopped');
