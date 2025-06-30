@@ -48,7 +48,6 @@ function DeviceModal({ isOpen, onClose, device }) {
       objectList: []
     }
   });
-
   const [showTemplates, setShowTemplates] = useState(false);
   const [showBACnetDiscovery, setShowBACnetDiscovery] = useState(false);
   const [showModbusHelper, setShowModbusHelper] = useState(false);
@@ -101,6 +100,12 @@ function DeviceModal({ isOpen, onClose, device }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    
+    // Validate required fields
+    if (!formData.name || !formData.host || !formData.port) {
+      alert('Please fill in all required fields (Name, Host, Port)');
+      return;
+    }
 
     // Generate registers string from Modbus functions if protocol is Modbus
     let finalRegisters = formData.registers;
@@ -108,6 +113,31 @@ function DeviceModal({ isOpen, onClose, device }) {
       finalRegisters = formData.modbusConfig.functions
         .map(func => `${func.functionCode}:${func.startAddress}:${func.quantity}`)
         .join(',');
+    }
+
+    // For BACnet, if no registers specified, use object instances from objectList
+    if (formData.protocol === 'bacnet' && !finalRegisters && formData.bacnetConfig.objectList.length > 0) {
+      finalRegisters = formData.bacnetConfig.objectList
+        .map((obj, index) => obj.instance !== undefined ? obj.instance : index)
+        .slice(0, 10) // Limit to first 10 objects
+        .join(',');
+    }
+
+    // Default registers for protocols if none specified
+    if (!finalRegisters) {
+      switch (formData.protocol) {
+        case 'modbus':
+          finalRegisters = '40001,40002,40003,40004,40005';
+          break;
+        case 'bacnet':
+          finalRegisters = '0,1,2,3,4';
+          break;
+        case 'snmp':
+          finalRegisters = '1.3.6.1.2.1.1.1.0,1.3.6.1.2.1.1.3.0';
+          break;
+        default:
+          finalRegisters = '1,2,3,4,5';
+      }
     }
 
     const deviceData = {
@@ -123,7 +153,7 @@ function DeviceModal({ isOpen, onClose, device }) {
     } else {
       addDevice(deviceData);
     }
-
+    
     onClose();
   };
 
@@ -189,11 +219,13 @@ function DeviceModal({ isOpen, onClose, device }) {
   };
 
   const handleBACnetDeviceSelect = (deviceConfig) => {
+    console.log('BACnet device selected:', deviceConfig);
     setFormData(prev => ({
       ...prev,
       ...deviceConfig,
       bacnetConfig: deviceConfig.bacnetConfig || prev.bacnetConfig
     }));
+    setShowBACnetDiscovery(false);
   };
 
   const addModbusFunction = () => {
@@ -204,7 +236,6 @@ function DeviceModal({ isOpen, onClose, device }) {
       quantity: 1,
       name: 'Register'
     };
-
     handleModbusConfigChange('functions', [
       ...formData.modbusConfig.functions,
       newFunction
@@ -288,8 +319,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                     <SafeIcon icon={FiTemplate} className="w-4 h-4" />
                     <span>Templates</span>
                   </motion.button>
-
-                  {/* BACnet Discovery Button - Always visible when protocol is BACnet */}
                   {formData.protocol === 'bacnet' && (
                     <motion.button
                       whileHover={{ scale: 1.05 }}
@@ -314,7 +343,7 @@ function DeviceModal({ isOpen, onClose, device }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Device Name
+                  Device Name *
                 </label>
                 <input
                   type="text"
@@ -325,7 +354,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Protocol
@@ -387,7 +415,7 @@ function DeviceModal({ isOpen, onClose, device }) {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Host/IP Address
+                  Host/IP Address *
                 </label>
                 <input
                   type="text"
@@ -395,13 +423,13 @@ function DeviceModal({ isOpen, onClose, device }) {
                   value={formData.host}
                   onChange={handleChange}
                   required
+                  placeholder="192.168.1.100"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Port
+                  Port *
                 </label>
                 <input
                   type="number"
@@ -412,7 +440,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {formData.protocol === 'modbus' ? 'Unit ID' : 'Device ID'}
@@ -422,6 +449,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                   name="deviceId"
                   value={formData.deviceId}
                   onChange={handleChange}
+                  placeholder={formData.protocol === 'snmp' ? 'public' : '1'}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -433,7 +461,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-gray-900">BACnet Configuration</h4>
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -448,7 +475,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       MAC Address (optional)
@@ -461,7 +487,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                       className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Max APDU Length
@@ -479,7 +504,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                       <option value={1476}>1476 bytes</option>
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Segmentation Support
@@ -522,9 +546,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                       <div className="space-y-1">
                         {formData.bacnetConfig.objectList.map((obj, index) => (
                           <div key={index} className="text-sm flex items-center justify-between">
-                            <span className="font-medium">{obj.name}</span>
+                            <span className="font-medium">{obj.objectName || obj.name}</span>
                             <span className="text-gray-500">
-                              {obj.type} ({obj.instance}) - {obj.units}
+                              {obj.objectType || obj.type} ({obj.instance}) - {obj.units}
                             </span>
                           </div>
                         ))}
@@ -535,204 +559,8 @@ function DeviceModal({ isOpen, onClose, device }) {
               </div>
             )}
 
-            {/* Modbus-specific Configuration */}
-            {formData.protocol === 'modbus' && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-lg font-semibold text-gray-900">Modbus Functions</h4>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      type="button"
-                      onClick={() => setShowModbusHelper(!showModbusHelper)}
-                      className="text-sm text-primary-600 hover:text-primary-800"
-                    >
-                      <SafeIcon icon={FiInfo} className="w-4 h-4 inline mr-1" />
-                      Help
-                    </button>
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={addModbusFunction}
-                      className="bg-primary-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors text-sm"
-                    >
-                      <SafeIcon icon={FiPlus} className="w-4 h-4" />
-                      <span>Add Function</span>
-                    </motion.button>
-                  </div>
-                </div>
-
-                {/* Modbus Help Panel */}
-                {showModbusHelper && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="bg-blue-50 border border-blue-200 rounded-lg p-4"
-                  >
-                    <h5 className="font-semibold text-blue-900 mb-2">Modbus Address Ranges</h5>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-800">
-                      <div>
-                        <p><strong>Coils (FC 01, 05, 15):</strong> 00001-09999</p>
-                        <p><strong>Discrete Inputs (FC 02):</strong> 10001-19999</p>
-                      </div>
-                      <div>
-                        <p><strong>Input Registers (FC 04):</strong> 30001-39999</p>
-                        <p><strong>Holding Registers (FC 03, 06, 16):</strong> 40001-49999</p>
-                      </div>
-                    </div>
-                  </motion.div>
-                )}
-
-                {/* Modbus Functions List */}
-                <div className="space-y-3">
-                  {formData.modbusConfig.functions.map((func, index) => (
-                    <motion.div
-                      key={func.id}
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      className="bg-gray-50 border border-gray-200 rounded-lg p-4"
-                    >
-                      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Function
-                          </label>
-                          <select
-                            value={func.functionCode}
-                            onChange={(e) => updateModbusFunction(func.id, 'functionCode', parseInt(e.target.value))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                          >
-                            {READ_FUNCTIONS.map(code => {
-                              const funcInfo = getFunctionInfo(code);
-                              return (
-                                <option key={code} value={code}>
-                                  FC{code.toString().padStart(2, '0')} - {funcInfo.name}
-                                </option>
-                              );
-                            })}
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Start Address
-                          </label>
-                          <input
-                            type="number"
-                            value={func.startAddress}
-                            onChange={(e) => updateModbusFunction(func.id, 'startAddress', parseInt(e.target.value))}
-                            className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm ${
-                              validateModbusAddress(func.functionCode, func.startAddress)
-                                ? 'border-gray-300'
-                                : 'border-red-300 bg-red-50'
-                            }`}
-                            min="1"
-                            max="49999"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Quantity
-                          </label>
-                          <input
-                            type="number"
-                            value={func.quantity}
-                            onChange={(e) => updateModbusFunction(func.id, 'quantity', parseInt(e.target.value))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                            min="1"
-                            max="125"
-                          />
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Name
-                          </label>
-                          <input
-                            type="text"
-                            value={func.name}
-                            onChange={(e) => updateModbusFunction(func.id, 'name', e.target.value)}
-                            placeholder="e.g., Temperature"
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                          />
-                        </div>
-
-                        <div>
-                          <button
-                            type="button"
-                            onClick={() => removeModbusFunction(func.id)}
-                            className="w-full bg-red-100 text-red-600 px-3 py-2 rounded-md hover:bg-red-200 transition-colors text-sm"
-                          >
-                            <SafeIcon icon={FiTrash2} className="w-4 h-4 mx-auto" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Function Description and Sample Addresses */}
-                      <div className="mt-3 pt-3 border-t border-gray-200">
-                        <div className="flex items-start justify-between text-xs text-gray-600">
-                          <div>
-                            <p><strong>Description:</strong> {getFunctionInfo(func.functionCode)?.description}</p>
-                            {!validateModbusAddress(func.functionCode, func.startAddress) && (
-                              <p className="text-red-600 mt-1">
-                                ⚠️ Invalid address for this function. Expected range: {getFunctionInfo(func.functionCode)?.addressPrefix}0001-{getFunctionInfo(func.functionCode)?.addressPrefix}9999
-                              </p>
-                            )}
-                          </div>
-                          <div className="text-right">
-                            <p><strong>Sample addresses:</strong></p>
-                            <p>{generateSampleAddresses(func.functionCode).join(', ')}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </motion.div>
-                  ))}
-
-                  {formData.modbusConfig.functions.length === 0 && (
-                    <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                      <p className="mb-2">No Modbus functions configured</p>
-                      <p className="text-sm">Add functions to specify what data to read from the device</p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Modbus Advanced Settings */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Timeout (ms)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.modbusConfig.timeout}
-                      onChange={(e) => handleModbusConfigChange('timeout', parseInt(e.target.value))}
-                      min="1000"
-                      max="10000"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Retries
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.modbusConfig.retries}
-                      onChange={(e) => handleModbusConfigChange('retries', parseInt(e.target.value))}
-                      min="0"
-                      max="5"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Non-Modbus and Non-BACnet Configuration */}
-            {formData.protocol !== 'modbus' && formData.protocol !== 'bacnet' && (
+            {/* Non-BACnet Configuration */}
+            {formData.protocol !== 'bacnet' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   {formData.protocol === 'snmp' ? 'OIDs' : 'Object IDs'} (comma-separated)
@@ -742,7 +570,11 @@ function DeviceModal({ isOpen, onClose, device }) {
                   name="registers"
                   value={formData.registers}
                   onChange={handleChange}
-                  placeholder={formData.protocol === 'snmp' ? 'e.g., 1.3.6.1.2.1.1.1.0' : 'e.g., 1,2,3,4,5'}
+                  placeholder={
+                    formData.protocol === 'snmp' 
+                      ? 'e.g., 1.3.6.1.2.1.1.1.0, 1.3.6.1.2.1.1.3.0' 
+                      : 'e.g., 40001, 40002, 40003, 40004, 40005'
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -763,7 +595,6 @@ function DeviceModal({ isOpen, onClose, device }) {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Poll Interval (ms)

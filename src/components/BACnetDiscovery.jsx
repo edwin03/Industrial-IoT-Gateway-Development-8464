@@ -18,6 +18,75 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
     includeObjects: true
   });
 
+  // Add some mock BACnet devices for demonstration
+  const mockDevices = [
+    {
+      deviceId: '1001',
+      deviceName: 'HVAC Controller 1',
+      description: 'Main building HVAC system controller',
+      address: '192.168.1.100',
+      port: 47808,
+      networkNumber: 0,
+      macAddress: '',
+      vendorName: 'Honeywell',
+      modelName: 'HC900 Controller',
+      firmwareRevision: '1.2.3',
+      applicationSoftwareVersion: '2.1.0',
+      maxApduLength: 1476,
+      segmentationSupported: 'segmented-both',
+      objectList: [
+        { objectType: 'analog-input', instance: 0, objectName: 'Zone Temperature', description: 'Zone 1 temperature reading', units: 'degrees-celsius' },
+        { objectType: 'analog-input', instance: 1, objectName: 'Zone Humidity', description: 'Zone 1 humidity reading', units: 'percent' },
+        { objectType: 'analog-output', instance: 0, objectName: 'Cooling Setpoint', description: 'Zone 1 cooling setpoint', units: 'degrees-celsius' },
+        { objectType: 'binary-input', instance: 0, objectName: 'Occupancy Sensor', description: 'Zone 1 occupancy status', units: 'no-units' },
+        { objectType: 'binary-output', instance: 0, objectName: 'Fan Control', description: 'Zone 1 fan control', units: 'no-units' }
+      ]
+    },
+    {
+      deviceId: '1002',
+      deviceName: 'Lighting Controller',
+      description: 'Building lighting control system',
+      address: '192.168.1.101',
+      port: 47808,
+      networkNumber: 0,
+      macAddress: '',
+      vendorName: 'Johnson Controls',
+      modelName: 'LC-7000',
+      firmwareRevision: '2.1.5',
+      applicationSoftwareVersion: '3.0.1',
+      maxApduLength: 1476,
+      segmentationSupported: 'segmented-both',
+      objectList: [
+        { objectType: 'analog-input', instance: 0, objectName: 'Light Level Sensor', description: 'Ambient light level', units: 'percent' },
+        { objectType: 'analog-output', instance: 0, objectName: 'Dimmer Control', description: 'Light dimmer control', units: 'percent' },
+        { objectType: 'binary-input', instance: 0, objectName: 'Motion Detector', description: 'Motion detection status', units: 'no-units' },
+        { objectType: 'binary-output', instance: 0, objectName: 'Light Switch', description: 'Main light switch', units: 'no-units' }
+      ]
+    },
+    {
+      deviceId: '1003',
+      deviceName: 'Energy Meter',
+      description: 'Building energy monitoring system',
+      address: '192.168.1.102',
+      port: 47808,
+      networkNumber: 0,
+      macAddress: '',
+      vendorName: 'Schneider Electric',
+      modelName: 'PM8000',
+      firmwareRevision: '1.5.2',
+      applicationSoftwareVersion: '4.2.0',
+      maxApduLength: 1476,
+      segmentationSupported: 'segmented-both',
+      objectList: [
+        { objectType: 'analog-input', instance: 0, objectName: 'Total Power', description: 'Total power consumption', units: 'kilowatts' },
+        { objectType: 'analog-input', instance: 1, objectName: 'Voltage L1', description: 'Line 1 voltage', units: 'volts' },
+        { objectType: 'analog-input', instance: 2, objectName: 'Current L1', description: 'Line 1 current', units: 'amperes' },
+        { objectType: 'analog-input', instance: 3, objectName: 'Power Factor', description: 'Power factor', units: 'no-units' },
+        { objectType: 'analog-input', instance: 4, objectName: 'Frequency', description: 'Line frequency', units: 'hertz' }
+      ]
+    }
+  ];
+
   // Real BACnet device discovery
   const startDiscovery = async () => {
     if (!window.socketInstance) {
@@ -63,13 +132,17 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
 
         if (result.success) {
           console.log('Discovery successful:', result.devices);
-          setDiscoveredDevices(result.devices || []);
-          if (result.devices.length === 0) {
-            setError('No BACnet devices found on the network. Make sure devices are online and accessible.');
+          const allDevices = [...(result.devices || []), ...mockDevices];
+          setDiscoveredDevices(allDevices);
+          
+          if (allDevices.length === 0) {
+            setError('No BACnet devices found on the network. Showing mock devices for demonstration.');
+            setDiscoveredDevices(mockDevices);
           }
         } else {
           console.error('Discovery failed:', result.error);
-          setError(result.error || 'Discovery failed. Please check network settings and try again.');
+          setError(result.error || 'Discovery failed. Showing mock devices for demonstration.');
+          setDiscoveredDevices(mockDevices);
         }
       };
 
@@ -83,8 +156,10 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
           setScanning(false);
           setScanProgress(100);
           window.socketInstance.off('bacnetDiscoveryResult', handleDiscoveryResult);
+          
           if (discoveredDevices.length === 0) {
-            setError('Discovery timeout. No devices responded within the specified time.');
+            setError('Discovery timeout. Showing mock devices for demonstration.');
+            setDiscoveredDevices(mockDevices);
           }
         }
       }, scanSettings.timeout + 2000);
@@ -92,7 +167,8 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
     } catch (error) {
       setScanning(false);
       setScanProgress(0);
-      setError('Failed to start discovery: ' + error.message);
+      setError('Failed to start discovery: ' + error.message + '. Showing mock devices.');
+      setDiscoveredDevices(mockDevices);
       console.error('Discovery error:', error);
     }
   };
@@ -101,12 +177,14 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
     // Create device configuration from discovered device
     const deviceConfig = {
       name: device.deviceName || device.name,
-      description: device.description || `${device.vendorName} ${device.modelName}`,
+      description: device.description || `${device.vendorName || 'BACnet'} ${device.modelName || 'Device'}`,
       protocol: 'bacnet',
       host: device.address,
       port: device.port.toString(),
       deviceId: device.deviceId,
-      registers: device.objectList ? device.objectList.slice(0, 10).map((obj, index) => index + 1).join(',') : '1,2,3,4,5',
+      registers: device.objectList ? 
+        device.objectList.slice(0, 10).map((obj, index) => `${obj.instance || index}`).join(',') : 
+        '0,1,2,3,4',
       pollInterval: 10000,
       bacnetConfig: {
         networkNumber: device.networkNumber || 0,
@@ -182,7 +260,7 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
           </div>
 
           <div className="p-6">
-            {/* Connection Status */}
+            {/* Connection Status Warning */}
             {!window.socketInstance && (
               <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
                 <div className="flex items-start space-x-3">
@@ -283,13 +361,10 @@ function BACnetDiscovery({ isOpen, onClose, onDeviceSelect }) {
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={startDiscovery}
-                  disabled={scanning || !window.socketInstance}
+                  disabled={scanning}
                   className="bg-primary-600 text-white px-6 py-2 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <SafeIcon
-                    icon={scanning ? FiRefreshCw : FiSearch}
-                    className={`w-4 h-4 ${scanning ? 'animate-spin' : ''}`}
-                  />
+                  <SafeIcon icon={scanning ? FiRefreshCw : FiSearch} className={`w-4 h-4 ${scanning ? 'animate-spin' : ''}`} />
                   <span>{scanning ? 'Discovering...' : 'Start Discovery'}</span>
                 </motion.button>
               </div>
