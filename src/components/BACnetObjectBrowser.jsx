@@ -58,55 +58,72 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
   }, [isOpen, device]);
 
   const loadObjectList = async () => {
-    if (!device) return;
-    
+    if (!device || !device.host) {
+      setError('Device host/address is required for BACnet object discovery');
+      setObjectList(generateDemoObjects());
+      return;
+    }
+
     setLoading(true);
     setError('');
     
     try {
       console.log('Loading object list for device:', device);
       
-      if (window.socketInstance) {
-        // Request object list from server
-        window.socketInstance.emit('getBacnetObjectList', {
-          deviceId: device.deviceId,
+      if (window.socketInstance && window.socketInstance.connected) {
+        console.log('Socket connected, requesting object list...');
+        
+        // Create device config for BACnet discovery
+        const deviceConfig = {
+          deviceId: device.deviceId || '1001',
           address: device.host,
-          port: parseInt(device.port),
+          port: parseInt(device.port) || 47808,
           networkNumber: device.bacnetConfig?.networkNumber || 0,
-          timeout: 10000
-        });
+          timeout: 15000 // Increased timeout
+        };
 
-        // Listen for response
+        console.log('Sending getBacnetObjectList with config:', deviceConfig);
+
+        // Set up response handler
         const handleObjectListResponse = (response) => {
           console.log('Received object list response:', response);
           setLoading(false);
           
           if (response.success) {
-            setObjectList(response.objects || []);
-            if (response.objects.length === 0) {
-              setError('No objects found on device. Device may not support object enumeration.');
+            const objects = response.objects || [];
+            console.log('Objects received:', objects.length);
+            setObjectList(objects);
+            
+            if (objects.length === 0) {
+              setError('No objects found on device. Device may not support object enumeration or may be offline.');
             }
           } else {
+            console.error('Object list request failed:', response.error);
             setError(response.error || 'Failed to read object list');
             // Fallback to demo objects
             setObjectList(generateDemoObjects());
           }
         };
 
+        // Set up one-time listener
         window.socketInstance.once('bacnetObjectListResponse', handleObjectListResponse);
+
+        // Send request
+        window.socketInstance.emit('getBacnetObjectList', deviceConfig);
 
         // Set timeout
         setTimeout(() => {
           if (loading) {
+            console.log('Request timeout, removing listener');
             window.socketInstance.off('bacnetObjectListResponse', handleObjectListResponse);
             setLoading(false);
-            setError('Request timeout. Showing demonstration objects.');
+            setError('Request timeout. Device may be offline or not responding. Showing demonstration objects.');
             setObjectList(generateDemoObjects());
           }
-        }, 12000);
+        }, 20000); // 20 second timeout
 
       } else {
-        // No socket connection, show demo objects
+        console.warn('Socket not connected, using demo objects');
         setError('No server connection. Showing demonstration objects.');
         setObjectList(generateDemoObjects());
         setLoading(false);
@@ -149,6 +166,24 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
         reliability: 'no-fault-detected'
       },
       {
+        objectType: 'analog-input',
+        instance: 3,
+        objectName: 'Return Air Temperature',
+        description: 'Return air temperature sensor',
+        units: 'degrees-celsius',
+        presentValue: 24.1,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'analog-input',
+        instance: 4,
+        objectName: 'Outside Air Temperature',
+        description: 'Outside air temperature sensor',
+        units: 'degrees-celsius',
+        presentValue: 18.7,
+        reliability: 'no-fault-detected'
+      },
+      {
         objectType: 'analog-output',
         instance: 0,
         objectName: 'Cooling Setpoint',
@@ -164,6 +199,15 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
         description: 'Zone heating setpoint control',
         units: 'degrees-celsius',
         presentValue: 20.0,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'analog-output',
+        instance: 2,
+        objectName: 'Damper Position',
+        description: 'Supply air damper position',
+        units: 'percent',
+        presentValue: 75.0,
         reliability: 'no-fault-detected'
       },
       {
@@ -185,6 +229,15 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
         reliability: 'no-fault-detected'
       },
       {
+        objectType: 'binary-input',
+        instance: 2,
+        objectName: 'Filter Status',
+        description: 'Air filter condition alarm',
+        units: 'no-units',
+        presentValue: 0,
+        reliability: 'no-fault-detected'
+      },
+      {
         objectType: 'binary-output',
         instance: 0,
         objectName: 'Fan Control',
@@ -196,8 +249,17 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
       {
         objectType: 'binary-output',
         instance: 1,
-        objectName: 'Damper Control',
-        description: 'Supply damper open/close',
+        objectName: 'Heating Valve',
+        description: 'Heating valve open/close',
+        units: 'no-units',
+        presentValue: 0,
+        reliability: 'no-fault-detected'
+      },
+      {
+        objectType: 'binary-output',
+        instance: 2,
+        objectName: 'Cooling Valve',
+        description: 'Cooling valve open/close',
         units: 'no-units',
         presentValue: 1,
         reliability: 'no-fault-detected'
@@ -211,6 +273,16 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
         presentValue: 2,
         reliability: 'no-fault-detected',
         stateText: ['Off', 'Heat', 'Cool', 'Auto']
+      },
+      {
+        objectType: 'multi-state-output',
+        instance: 0,
+        objectName: 'Fan Speed',
+        description: 'Supply fan speed control',
+        units: 'no-units',
+        presentValue: 3,
+        reliability: 'no-fault-detected',
+        stateText: ['Off', 'Low', 'Medium', 'High']
       }
     ];
   };
@@ -269,7 +341,6 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
       alert('Please select at least one object.');
       return;
     }
-    
     onObjectsSelect(selectedObjects);
     onClose();
   };
@@ -348,27 +419,43 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
                 <SafeIcon icon={FiRefreshCw} className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                 <span>Refresh</span>
               </motion.button>
-              <button
-                onClick={onClose}
-                className="text-gray-400 hover:text-gray-600"
-              >
+              <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
                 <SafeIcon icon={FiX} className="w-6 h-6" />
               </button>
             </div>
           </div>
 
           <div className="p-6">
+            {/* Connection Status */}
+            {!window.socketInstance?.connected && (
+              <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="flex items-start space-x-3">
+                  <SafeIcon icon={FiInfo} className="w-5 h-5 text-red-600 mt-0.5" />
+                  <div className="flex-1">
+                    <h4 className="text-sm font-medium text-red-900 mb-1">Server Connection Required</h4>
+                    <p className="text-sm text-red-800">
+                      BACnet object browsing requires a connection to the gateway server. Please ensure the server is running and refresh the page.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Loading State */}
             {loading && (
               <div className="text-center py-12">
                 <SafeIcon icon={FiRefreshCw} className="w-8 h-8 mx-auto mb-4 animate-spin text-primary-600" />
                 <h3 className="text-lg font-semibold text-gray-900 mb-2">Reading Object List</h3>
                 <p className="text-gray-600">Discovering available objects on the BACnet device...</p>
+                <div className="mt-4 text-sm text-gray-500">
+                  <p>Device: {device?.host}:{device?.port}</p>
+                  <p>This may take up to 20 seconds...</p>
+                </div>
               </div>
             )}
 
             {/* Error State */}
-            {error && (
+            {error && !loading && (
               <div className="mb-4 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                 <div className="flex items-start space-x-3">
                   <SafeIcon icon={FiInfo} className="w-5 h-5 text-yellow-600 mt-0.5" />
@@ -493,10 +580,9 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
                             <div>
                               <span className="text-gray-500">Present Value:</span>
                               <div className="font-medium">
-                                {typeof object.presentValue === 'number' ? 
-                                  object.presentValue.toFixed(2) : 
-                                  object.presentValue?.toString()
-                                }
+                                {typeof object.presentValue === 'number' 
+                                  ? object.presentValue.toFixed(2) 
+                                  : object.presentValue?.toString()}
                                 {object.units && object.units !== 'no-units' && (
                                   <span className="text-gray-500 ml-1">
                                     {object.units.replace('-', ' ')}
@@ -505,7 +591,6 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
                               </div>
                             </div>
                           )}
-
                           {object.reliability && (
                             <div>
                               <span className="text-gray-500">Reliability:</span>
@@ -514,7 +599,6 @@ function BACnetObjectBrowser({ isOpen, onClose, device, onObjectsSelect }) {
                               </div>
                             </div>
                           )}
-
                           {object.stateText && (
                             <div className="col-span-2">
                               <span className="text-gray-500">States:</span>

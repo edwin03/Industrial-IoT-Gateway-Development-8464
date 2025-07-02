@@ -23,7 +23,6 @@ class BACnetClient {
     this.log('info', `Starting BACnet discovery (timeout: ${timeout}ms, max: ${maxDevices})`);
     
     try {
-      // Try multiple discovery methods
       const discoveredDevices = [];
 
       // Method 1: Try bacnet-stack-utils if available
@@ -61,7 +60,7 @@ class BACnetClient {
 
       // Limit results and enhance with object discovery if requested
       const limitedDevices = discoveredDevices.slice(0, maxDevices);
-
+      
       if (includeObjects && limitedDevices.length > 0) {
         this.log('info', `Reading object lists for ${limitedDevices.length} devices...`);
         for (const device of limitedDevices) {
@@ -89,12 +88,16 @@ class BACnetClient {
 
   // Read object list from a specific BACnet device
   async readObjectList(deviceConfig) {
-    const { deviceId, address, port = 47808, networkNumber = 0, timeout = 10000 } = deviceConfig;
+    const { deviceId, address, port = 47808, networkNumber = 0, timeout = 15000 } = deviceConfig;
     
     this.log('info', `Reading object list from BACnet device ${deviceId} at ${address}:${port}`);
     
     try {
-      // Try multiple methods to read object list
+      // Validate input parameters
+      if (!address) {
+        throw new Error('Device address is required');
+      }
+
       let objectList = [];
 
       // Method 1: Try bacnet-stack-utils if available
@@ -132,9 +135,10 @@ class BACnetClient {
   async readObjectListWithUtils(address, port, deviceId, timeout) {
     try {
       // Try to use bacnet-stack-utils for object list reading
-      const { stdout } = await execAsync(`timeout ${Math.floor(timeout / 1000)} bacepics ${address} ${deviceId}`, {
-        timeout: timeout + 1000
-      });
+      const { stdout } = await execAsync(
+        `timeout ${Math.floor(timeout / 1000)} bacepics ${address} ${deviceId}`,
+        { timeout: timeout + 1000 }
+      );
       return this.parseObjectListOutput(stdout);
     } catch (error) {
       throw new Error('BACnet utilities not available or failed');
@@ -231,6 +235,7 @@ class BACnetClient {
           }
         } catch (error) {
           // Skip invalid lines
+          continue;
         }
       }
     }
@@ -252,6 +257,7 @@ class BACnetClient {
       if (match) {
         const [, typeStr, instance, name] = match;
         const objectType = this.normalizeObjectType(typeStr);
+        
         return {
           objectType: objectType,
           instance: parseInt(instance),
@@ -497,9 +503,10 @@ class BACnetClient {
   async discoverWithBacnetUtils(networkRange, timeout) {
     try {
       // Try to use bacnet-stack-utils if installed
-      const { stdout } = await execAsync(`timeout ${Math.floor(timeout / 1000)} bacwi -1`, {
-        timeout: timeout + 1000
-      });
+      const { stdout } = await execAsync(
+        `timeout ${Math.floor(timeout / 1000)} bacwi -1`,
+        { timeout: timeout + 1000 }
+      );
       return this.parseBacnetUtilsOutput(stdout);
     } catch (error) {
       // Tool not available or failed
@@ -562,7 +569,7 @@ class BACnetClient {
   async discoverWithNetworkScan(networkRange, timeout) {
     const devices = [];
     const networkBase = this.getNetworkBase(networkRange);
-
+    
     // Scan common BACnet addresses (limited scan for demo)
     const testAddresses = ['100', '101', '102', '110', '111', '120', '200', '201'];
     const scanPromises = [];
@@ -574,7 +581,10 @@ class BACnetClient {
 
     try {
       const results = await Promise.allSettled(scanPromises);
-      devices.push(...results.filter(r => r.status === 'fulfilled' && r.value).map(r => r.value));
+      devices.push(...results
+        .filter(r => r.status === 'fulfilled' && r.value)
+        .map(r => r.value)
+      );
     } catch (error) {
       this.log('warning', `Network scan error: ${error.message}`);
     }
@@ -586,6 +596,7 @@ class BACnetClient {
   async probeBacnetDevice(ip, port, timeout) {
     try {
       const net = await import('net');
+      
       return new Promise((resolve) => {
         const socket = new net.Socket();
         const timer = setTimeout(() => {
@@ -717,6 +728,7 @@ class BACnetClient {
       // Try to detect local network
       return '192.168.1'; // Default fallback
     }
+    
     // Parse custom network range (e.g., "192.168.1.0/24")
     const [network] = networkRange.split('/');
     const parts = network.split('.');
@@ -783,22 +795,23 @@ class BACnetClient {
   // Read BACnet device data - Enhanced to support object types
   async readDevice(deviceConfig) {
     const deviceId = deviceConfig.deviceId;
+    
     try {
       // Enhanced simulation of BACnet data reading with object type support
       const data = {};
 
       // Parse registers to get object type and instance information
       const objectSpecs = this.parseObjectSpecs(deviceConfig.registers);
-      
+
       // Generate data for each object specification
       objectSpecs.forEach((spec, index) => {
         const { objectType, instance } = spec;
         const value = this.generateValueForObjectType(objectType, instance);
-        
+
         // Create descriptive key based on object type and instance
         const key = `${objectType}_${instance}`;
         data[key] = value;
-        
+
         // Also add metadata
         data[`${key}_type`] = objectType;
         data[`${key}_instance`] = instance;
@@ -864,10 +877,10 @@ class BACnetClient {
   // Parse object specifications from registers string
   parseObjectSpecs(registers) {
     if (!registers) return [];
-    
+
     const specs = [];
     const parts = registers.split(',');
-    
+
     parts.forEach(part => {
       const trimmed = part.trim();
       if (trimmed.includes(':')) {
@@ -890,7 +903,7 @@ class BACnetClient {
         }
       }
     });
-    
+
     return specs;
   }
 
@@ -909,17 +922,14 @@ class BACnetClient {
           case 4: return parseFloat((200 + Math.random() * 50).toFixed(1)); // Voltage
           default: return parseFloat((Math.random() * 100).toFixed(2));
         }
-        
       case 'binary-input':
       case 'binary-output':
       case 'binary-value':
         return Math.random() > 0.5 ? 1 : 0;
-        
       case 'multi-state-input':
       case 'multi-state-output':
       case 'multi-state-value':
         return Math.floor(Math.random() * 4); // 0-3 states
-        
       default:
         return parseFloat((Math.random() * 100).toFixed(2));
     }
