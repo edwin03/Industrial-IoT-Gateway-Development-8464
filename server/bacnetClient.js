@@ -1,7 +1,6 @@
 // Enhanced BACnet client with real discovery functionality and object list reading
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
+import {exec} from 'child_process';
+import {promisify} from 'util';
 const execAsync = promisify(exec);
 
 class BACnetClient {
@@ -24,7 +23,7 @@ class BACnetClient {
     
     try {
       const discoveredDevices = [];
-
+      
       // Method 1: Try bacnet-stack-utils if available
       try {
         const bacnetDevices = await this.discoverWithBacnetUtils(networkRange, timeout);
@@ -146,7 +145,7 @@ class BACnetClient {
       if (enhancedObjects.length > 0) {
         enhancedObjects[0].description = `[SIMULATED] ${enhancedObjects[0].description} - Device: ${address}:${port}`;
       }
-
+      
       return enhancedObjects;
     } catch (error) {
       this.log('error', `Failed to read object list from ${address}:${port}: ${error.message}`);
@@ -156,7 +155,6 @@ class BACnetClient {
       if (demoObjects.length > 0) {
         demoObjects[0].description = `[ERROR FALLBACK] ${demoObjects[0].description} - ${error.message}`;
       }
-      
       return demoObjects;
     }
   }
@@ -165,11 +163,10 @@ class BACnetClient {
   async testNetworkConnectivity(address, port) {
     try {
       const net = await import('net');
-      
       return new Promise((resolve) => {
         const socket = new net.Socket();
         const timeout = 5000; // 5 second timeout
-
+        
         const timer = setTimeout(() => {
           socket.destroy();
           resolve(false);
@@ -201,7 +198,7 @@ class BACnetClient {
       
       this.log('info', `Executing BACnet utils command: ${command}`);
       
-      const { stdout, stderr } = await execAsync(command, { 
+      const { stdout, stderr } = await execAsync(command, {
         timeout: timeout + 1000,
         encoding: 'utf8'
       });
@@ -259,7 +256,6 @@ class BACnetClient {
             
             // Parse response (simplified - in production use proper BACnet library)
             const objectList = this.parseObjectListResponse(msg);
-            
             if (objectList.length > 0) {
               resolve(objectList);
             } else {
@@ -302,12 +298,15 @@ class BACnetClient {
       0x0e, // Service choice (Read Property Multiple)
       0x0c, // Context tag (object identifier)
       (objectType << 2) | 0x02, // Object type and instance (simplified)
-      deviceId & 0xff, (deviceId >> 8) & 0xff, (deviceId >> 16) & 0xff,
+      deviceId & 0xff,
+      (deviceId >> 8) & 0xff,
+      (deviceId >> 16) & 0xff,
       0x1e, // Property list opening tag
       0x09, // Property identifier tag
       propertyId === 'object-list' ? 0x4c : 0x55, // Property identifier
       0x1f  // Property list closing tag
     ]);
+    
     return packet;
   }
 
@@ -315,7 +314,6 @@ class BACnetClient {
   parseObjectListResponse(msg) {
     try {
       // Simplified parsing - in production use proper BACnet library
-      // For now, return enhanced demo objects
       this.log('info', `Parsing BACnet response, ${msg.length} bytes received`);
       
       // Check if this looks like a valid BACnet response
@@ -335,7 +333,7 @@ class BACnetClient {
       if (objects.length > 0) {
         objects[0].description = `[PARSED RESPONSE] ${objects[0].description} - Response: ${msg.length} bytes`;
       }
-
+      
       return objects;
     } catch (error) {
       this.log('warning', `Failed to parse BACnet response: ${error.message}`);
@@ -347,9 +345,9 @@ class BACnetClient {
   parseObjectListOutput(output) {
     const objects = [];
     const lines = output.split('\n');
-
+    
     this.log('info', `Parsing BACnet tool output: ${lines.length} lines`);
-
+    
     for (const line of lines) {
       // Parse different formats of BACnet tool outputs
       if (line.includes('Object:') || line.includes('AI') || line.includes('AO') || 
@@ -389,7 +387,6 @@ class BACnetClient {
       const match = line.match(pattern);
       if (match) {
         let typeStr, instance, name;
-        
         if (match.length === 4) {
           [, typeStr, instance, name] = match;
         } else if (match.length === 5) {
@@ -399,7 +396,6 @@ class BACnetClient {
         }
 
         const objectType = this.normalizeObjectType(typeStr);
-        
         return {
           objectType: objectType,
           instance: parseInt(instance) || 0,
@@ -411,7 +407,6 @@ class BACnetClient {
         };
       }
     }
-
     return null;
   }
 
@@ -434,12 +429,12 @@ class BACnetClient {
       'BINARY-INPUT': 'binary-input',
       'BINARY-OUTPUT': 'binary-output'
     };
-    
+
     const normalized = typeMap[typeStr.toUpperCase()];
     if (normalized) {
       return normalized;
     }
-    
+
     // Fallback: convert to lowercase and replace spaces/dashes
     return typeStr.toLowerCase().replace(/[^a-z]/g, '-');
   }
@@ -649,9 +644,11 @@ class BACnetClient {
   // Adjust values based on device ID for variation
   adjustValueForDevice(baseValue, objectType, deviceNum) {
     const variation = ((deviceNum % 5) * 0.1) - 0.2; // -20% to +20% variation
+    
     if (typeof baseValue === 'number' && objectType.includes('analog')) {
       return parseFloat((baseValue * (1 + variation)).toFixed(2));
     }
+    
     return baseValue;
   }
 
@@ -703,6 +700,7 @@ class BACnetClient {
 
         socket.bind(() => {
           socket.setBroadcast(true);
+          
           // Send WHO-IS broadcast
           const whoIsPacket = this.createWhoIsPacket();
           const broadcastAddress = networkRange === 'local' ? '255.255.255.255' : this.getBroadcastAddress(networkRange);
@@ -729,7 +727,7 @@ class BACnetClient {
     // Scan common BACnet addresses (limited scan for demo)
     const testAddresses = ['100', '101', '102', '110', '111', '120', '200', '201'];
     const scanPromises = [];
-
+    
     for (const addr of testAddresses) {
       const ip = `${networkBase}.${addr}`;
       scanPromises.push(this.probeBacnetDevice(ip, 47808, 2000));
@@ -752,7 +750,6 @@ class BACnetClient {
   async probeBacnetDevice(ip, port, timeout) {
     try {
       const net = await import('net');
-      
       return new Promise((resolve) => {
         const socket = new net.Socket();
         const timer = setTimeout(() => {
@@ -763,6 +760,7 @@ class BACnetClient {
         socket.connect(port, ip, () => {
           clearTimeout(timer);
           socket.destroy();
+          
           // If connection successful, create a mock device entry
           resolve({
             deviceId: `${ip.replace(/\./g, '')}_${Date.now()}`,
@@ -805,6 +803,7 @@ class BACnetClient {
       0x30, // Context tag
       0x75  // WHO-IS service
     ]);
+    
     return packet;
   }
 
@@ -834,7 +833,6 @@ class BACnetClient {
           objectList: this.getDefaultObjectList()
         };
       }
-
       return null;
     } catch (error) {
       return null;
@@ -845,7 +843,7 @@ class BACnetClient {
   parseBacnetUtilsOutput(output) {
     const devices = [];
     const lines = output.split('\n');
-
+    
     for (const line of lines) {
       if (line.includes('Device') && line.includes('Instance')) {
         try {
@@ -874,7 +872,7 @@ class BACnetClient {
         }
       }
     }
-
+    
     return devices;
   }
 
@@ -896,6 +894,7 @@ class BACnetClient {
     if (networkRange === 'broadcast') {
       return '255.255.255.255';
     }
+    
     const networkBase = this.getNetworkBase(networkRange);
     return `${networkBase}.255`;
   }
@@ -955,36 +954,36 @@ class BACnetClient {
     try {
       // Enhanced simulation of BACnet data reading with object type support
       const data = {};
-
+      
       // Parse registers to get object type and instance information
       const objectSpecs = this.parseObjectSpecs(deviceConfig.registers);
-
+      
       // Generate data for each object specification
       objectSpecs.forEach((spec, index) => {
         const { objectType, instance } = spec;
         const value = this.generateValueForObjectType(objectType, instance);
-
+        
         // Create descriptive key based on object type and instance
         const key = `${objectType}_${instance}`;
         data[key] = value;
-
+        
         // Also add metadata
         data[`${key}_type`] = objectType;
         data[`${key}_instance`] = instance;
         data[`${key}_units`] = this.getDefaultUnits(objectType);
       });
-
+      
       // If no object specs found, fall back to legacy behavior
       if (objectSpecs.length === 0) {
         const objectIds = deviceConfig.registers ? 
           deviceConfig.registers.split(',').map(r => r.trim()) : 
           ['0', '1', '2', '3', '4'];
-
+        
         // Generate simulated data for each object
         objectIds.forEach((objectId, index) => {
           let value;
           const objNum = parseInt(objectId) || index;
-
+          
           // Generate different types of realistic data
           switch (objNum % 5) {
             case 0: // Temperature
@@ -1012,7 +1011,7 @@ class BACnetClient {
               data[`object_${objectId}`] = parseFloat(value.toFixed(2));
           }
         });
-
+        
         // Add some common BACnet objects if using default config
         if (!deviceConfig.registers || deviceConfig.registers === '0,1,2,3,4') {
           data.present_value = parseFloat((Math.random() * 100).toFixed(2));
@@ -1033,10 +1032,10 @@ class BACnetClient {
   // Parse object specifications from registers string
   parseObjectSpecs(registers) {
     if (!registers) return [];
-
+    
     const specs = [];
     const parts = registers.split(',');
-
+    
     parts.forEach(part => {
       const trimmed = part.trim();
       if (trimmed.includes(':')) {
@@ -1059,7 +1058,7 @@ class BACnetClient {
         }
       }
     });
-
+    
     return specs;
   }
 
