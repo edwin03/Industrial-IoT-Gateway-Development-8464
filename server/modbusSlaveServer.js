@@ -20,7 +20,7 @@ class ModbusSlaveServer {
 
       this.port = config.port || 5020;
       this.onLogCallback = onLog;
-      
+
       // Create new server instance
       this.server = new ModbusRTU.ServerTCP({
         host: '0.0.0.0',
@@ -32,28 +32,24 @@ class ModbusSlaveServer {
       // Set up holding registers (40001-49999)
       this.server.setRequestHandler(3, (addr, length) => {
         this.log('info', `Modbus read request: address=${addr}, length=${length}`);
-        
         const values = [];
         for (let i = 0; i < length; i++) {
           const registerAddr = addr + i;
           const value = this.registers.get(registerAddr) || 0;
           values.push(value);
         }
-        
         return values;
       });
 
       // Set up input registers (30001-39999) - read-only
       this.server.setRequestHandler(4, (addr, length) => {
         this.log('info', `Modbus input register read: address=${addr}, length=${length}`);
-        
         const values = [];
         for (let i = 0; i < length; i++) {
           const registerAddr = addr + i;
           const value = this.registers.get(registerAddr + 30000) || 0; // Offset for input registers
           values.push(value);
         }
-        
         return values;
       });
 
@@ -78,7 +74,6 @@ class ModbusSlaveServer {
           this.log('info', `Modbus client disconnected: ${client.remoteAddress}`);
         });
       });
-
     } catch (error) {
       this.log('error', `Failed to start Modbus slave server: ${error.message}`);
       throw error;
@@ -99,6 +94,9 @@ class ModbusSlaveServer {
         this.server = null;
       } catch (error) {
         this.log('error', `Error stopping Modbus slave server: ${error.message}`);
+        // Force cleanup
+        this.server = null;
+        this.isRunning = false;
       }
     }
   }
@@ -129,7 +127,7 @@ class ModbusSlaveServer {
 
           // Store in holding registers (read/write)
           this.registers.set(holdingRegisterAddr, numValue);
-          
+
           // Also store in input registers (read-only)
           this.registers.set(inputRegisterAddr + 30000, numValue);
 

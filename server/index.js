@@ -73,6 +73,9 @@ let stats = {
   errors: 0
 };
 
+// Shutdown flag
+let isShuttingDown = false;
+
 // Initialize services
 const modbusSlaveServer = new ModbusSlaveServer();
 const bacnetClient = new BACnetClient();
@@ -140,7 +143,7 @@ function applyModbusScaling(value, scalingConfig) {
   if (!scalingConfig || !scalingConfig.enabled) {
     return value;
   }
-  
+
   const scaled = (value * scalingConfig.multiplier) + scalingConfig.offset;
   return parseFloat(scaled.toFixed(scalingConfig.decimals));
 }
@@ -181,7 +184,7 @@ async function readModbusDevice(device) {
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i] ? 1 : 0;
-                
+
                 // Apply scaling if configured
                 const scaling = scalingMap.get(register);
                 if (scaling) {
@@ -193,13 +196,13 @@ async function readModbusDevice(device) {
                 }
               }
               break;
-              
+
             case 2: // Read Discrete Inputs
               result = await client.readDiscreteInputs(startAddr - 10001, quantity);
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i] ? 1 : 0;
-                
+
                 const scaling = scalingMap.get(register);
                 if (scaling) {
                   value = applyModbusScaling(value, scaling);
@@ -210,13 +213,13 @@ async function readModbusDevice(device) {
                 }
               }
               break;
-              
+
             case 3: // Read Holding Registers
               result = await client.readHoldingRegisters(startAddr - 40001, quantity);
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i];
-                
+
                 const scaling = scalingMap.get(register);
                 if (scaling) {
                   value = applyModbusScaling(value, scaling);
@@ -227,13 +230,13 @@ async function readModbusDevice(device) {
                 }
               }
               break;
-              
+
             case 4: // Read Input Registers
               result = await client.readInputRegisters(startAddr - 30001, quantity);
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i];
-                
+
                 const scaling = scalingMap.get(register);
                 if (scaling) {
                   value = applyModbusScaling(value, scaling);
@@ -244,7 +247,7 @@ async function readModbusDevice(device) {
                 }
               }
               break;
-              
+
             default:
               console.warn(`Unsupported function code: ${func.functionCode}`);
           }
@@ -260,7 +263,7 @@ async function readModbusDevice(device) {
         try {
           const result = await client.readHoldingRegisters(register - 40001, 1);
           let value = result.data[0];
-          
+
           // Apply scaling if configured
           const scaling = scalingMap.get(register.toString());
           if (scaling) {
@@ -321,6 +324,8 @@ async function readBACnetDevice(device) {
 
 // Device polling
 async function pollDevice(device) {
+  if (isShuttingDown) return; // Don't poll if shutting down
+
   const previousStatus = device.status;
   try {
     let data = {};
@@ -357,8 +362,8 @@ async function pollDevice(device) {
     // Process device data for history logging
     dataHistoryManager.processDeviceData(device);
 
-    // Publish to MQTT
-    if (mqttClient && mqttClient.connected) {
+    // Publish to MQTT if connected and not shutting down
+    if (mqttClient && mqttClient.connected && !isShuttingDown) {
       const topic = device.mqttTopic || `${settings.mqtt.topic}/${device.name.replace(/\s+/g, '_')}`;
       const payload = {
         deviceId: device.id,
@@ -401,7 +406,9 @@ async function pollDevice(device) {
   }
 
   // Broadcast device update
-  io.emit('deviceUpdate', device);
+  if (!isShuttingDown) {
+    io.emit('deviceUpdate', device);
+  }
 }
 
 // Start polling for a device
@@ -409,12 +416,18 @@ function startDevicePolling(device) {
   stopDevicePolling(device.id);
   const interval = device.pollInterval || settings.polling.interval;
   const pollerId = setInterval(() => {
-    pollDevice(device);
+    if (!isShuttingDown) {
+      pollDevice(device);
+    }
   }, interval);
   devicePollers.set(device.id, pollerId);
 
   // Initial poll after 2 seconds
-  setTimeout(() => pollDevice(device), 2000);
+  setTimeout(() => {
+    if (!isShuttingDown) {
+      pollDevice(device);
+    }
+  }, 2000);
 }
 
 // Stop polling for a device
@@ -427,6 +440,8 @@ function stopDevicePolling(deviceId) {
 
 // Update statistics
 function updateStats() {
+  if (isShuttingDown) return;
+  
   stats.totalDevices = devices.length;
   stats.activeDevices = devices.filter(d => d.status === 'online').length;
   io.emit('statsUpdate', stats);
@@ -472,10 +487,16 @@ io.on('connection', (socket) => {
     try {
       addLog('info', 'Starting BACnet device discovery', 'BACnet');
       const discoveredDevices = await bacnetClient.discoverDevices(options);
-      socket.emit('bacnetDiscoveryResult', { success: true, devices: discoveredDevices });
+      socket.emit('bacnetDiscoveryResult', {
+        success: true,
+        devices: discoveredDevices
+      });
     } catch (error) {
       addLog('error', `BACnet discovery failed: ${error.message}`, 'BACnet');
-      socket.emit('bacnetDiscoveryResult', { success: false, error: error.message });
+      socket.emit('bacnetDiscoveryResult', {
+        success: false,
+        error: error.message
+      });
     }
   });
 
@@ -484,10 +505,16 @@ io.on('connection', (socket) => {
     try {
       addLog('info', `Reading BACnet object list from ${deviceConfig.address}`, 'BACnet');
       const objectList = await bacnetClient.readObjectList(deviceConfig);
-      socket.emit('bacnetObjectListResponse', { success: true, objects: objectList });
+      socket.emit('bacnetObjectListResponse', {
+        success: true,
+        objects: objectList
+      });
     } catch (error) {
       addLog('error', `Failed to read BACnet object list: ${error.message}`, 'BACnet');
-      socket.emit('bacnetObjectListResponse', { success: false, error: error.message });
+      socket.emit('bacnetObjectListResponse', {
+        success: false,
+        error: error.message
+      });
     }
   });
 
@@ -527,13 +554,14 @@ io.on('connection', (socket) => {
     try {
       console.log('Testing email connection...');
       addLog('info', 'Email connection test requested', 'Email Service');
+      
       const currentEmailSettings = settings.email;
       console.log('Current email settings:', JSON.stringify(currentEmailSettings, null, 2));
       
       emailService.configure(currentEmailSettings, addLog);
       const result = await emailService.testConnection();
-      console.log('Email test result:', result);
       
+      console.log('Email test result:', result);
       addLog('success', 'Email connection test successful', 'Email Service');
       socket.emit('emailTestResult', result);
     } catch (error) {
@@ -547,14 +575,18 @@ io.on('connection', (socket) => {
     try {
       console.log('Sending test email to:', recipient);
       addLog('info', `Test email requested for: ${recipient}`, 'Email Service');
-      const currentEmailSettings = settings.email;
       
+      const currentEmailSettings = settings.email;
       emailService.configure(currentEmailSettings, addLog);
       const result = await emailService.sendTestEmail(recipient);
-      console.log('Test email sent:', result);
       
+      console.log('Test email sent:', result);
       addLog('success', `Test email sent to ${recipient}`, 'Email Service');
-      socket.emit('emailTestResult', { success: true, message: 'Test email sent successfully', messageId: result.messageId });
+      socket.emit('emailTestResult', {
+        success: true,
+        message: 'Test email sent successfully',
+        messageId: result.messageId
+      });
     } catch (error) {
       console.error('Failed to send test email:', error);
       addLog('error', `Failed to send test email: ${error.message}`, 'Email Service');
@@ -611,10 +643,10 @@ io.on('connection', (socket) => {
   socket.on('updateSettings', async (newSettings) => {
     const oldModbusSlaveEnabled = settings.modbusSlave.enabled;
     const oldEmailSettings = JSON.stringify(settings.email);
-
+    
     settings = { ...settings, ...newSettings };
     console.log('Settings updated:', JSON.stringify(newSettings, null, 2));
-
+    
     initializeMQTT();
 
     // Handle Modbus slave server changes
@@ -656,11 +688,15 @@ io.on('connection', (socket) => {
 initializeServices();
 
 // Update stats every 10 seconds
-setInterval(updateStats, 10000);
+const statsInterval = setInterval(() => {
+  if (!isShuttingDown) {
+    updateStats();
+  }
+}, 10000);
 
 // Update Modbus slave registers every 30 seconds if enabled
-setInterval(() => {
-  if (settings.modbusSlave.enabled && modbusSlaveServer.isRunning) {
+const modbusSlaveInterval = setInterval(() => {
+  if (!isShuttingDown && settings.modbusSlave.enabled && modbusSlaveServer.isRunning) {
     modbusSlaveServer.updateDeviceData(devices);
     const info = modbusSlaveServer.getRegisterMappings();
     io.emit('modbusSlaveInfo', info);
@@ -668,40 +704,95 @@ setInterval(() => {
 }, 30000);
 
 // Flush history buffers every 5 minutes
-setInterval(() => {
-  dataHistoryManager.flushAllBuffers();
+const historyFlushInterval = setInterval(() => {
+  if (!isShuttingDown) {
+    dataHistoryManager.flushAllBuffers();
+  }
 }, 5 * 60 * 1000);
 
 // Start server
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+const serverInstance = server.listen(PORT, () => {
   console.log(`IoT Protocol Gateway server running on port ${PORT}`);
   addLog('success', `Gateway server started on port ${PORT}`, 'System');
 });
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-  console.log('Shutting down gateway...');
+// Graceful shutdown function
+async function gracefulShutdown(signal) {
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+  isShuttingDown = true;
 
-  // Flush all history buffers before shutdown
-  dataHistoryManager.flushAllBuffers();
-
-  // Stop all device pollers
-  devicePollers.forEach((pollerId) => {
-    clearInterval(pollerId);
+  // Stop accepting new connections
+  serverInstance.close(() => {
+    console.log('HTTP server closed');
   });
 
-  // Close MQTT connection
-  if (mqttClient) {
-    mqttClient.end();
-  }
+  try {
+    // Stop all intervals
+    clearInterval(statsInterval);
+    clearInterval(modbusSlaveInterval);
+    clearInterval(historyFlushInterval);
 
-  // Stop Modbus slave server
-  await modbusSlaveServer.stop();
+    // Flush all history buffers before shutdown
+    console.log('Flushing history buffers...');
+    dataHistoryManager.flushAllBuffers();
 
-  // Close server
-  server.close(() => {
-    console.log('Gateway server stopped');
+    // Stop all device pollers
+    console.log('Stopping device pollers...');
+    devicePollers.forEach((pollerId) => {
+      clearInterval(pollerId);
+    });
+    devicePollers.clear();
+
+    // Close MQTT connection
+    if (mqttClient) {
+      console.log('Closing MQTT connection...');
+      mqttClient.end(true); // Force close
+    }
+
+    // Stop Modbus slave server
+    console.log('Stopping Modbus slave server...');
+    await modbusSlaveServer.stop();
+
+    // Close Socket.IO server
+    console.log('Closing Socket.IO server...');
+    io.close();
+
+    console.log('Graceful shutdown completed');
     process.exit(0);
-  });
+  } catch (error) {
+    console.error('Error during shutdown:', error);
+    process.exit(1);
+  }
+}
+
+// Handle shutdown signals
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  addLog('error', `Uncaught Exception: ${error.message}`, 'System');
+  gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  addLog('error', `Unhandled Rejection: ${reason}`, 'System');
+  gracefulShutdown('UNHANDLED_REJECTION');
+});
+
+// Handle Windows CTRL+C
+if (process.platform === 'win32') {
+  const readline = await import('readline');
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  rl.on('SIGINT', () => {
+    gracefulShutdown('SIGINT');
+  });
+}
