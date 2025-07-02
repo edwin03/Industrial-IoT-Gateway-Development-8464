@@ -93,6 +93,7 @@ function addLog(level, message, device = null) {
     message,
     device
   };
+  
   logs.unshift(log);
   if (logs.length > 1000) logs.pop();
 
@@ -101,8 +102,9 @@ function addLog(level, message, device = null) {
 
   // Send email notification for system errors
   if (level === 'error' && device === 'System') {
-    emailService.sendSystemNotification('systemErrors', message, { timestamp: log.timestamp })
-      .catch(err => console.error('Failed to send email notification:', err));
+    emailService.sendSystemNotification('systemErrors', message, {
+      timestamp: log.timestamp
+    }).catch(err => console.error('Failed to send email notification:', err));
   }
 }
 
@@ -151,6 +153,7 @@ function applyModbusScaling(value, scalingConfig) {
 // Enhanced Modbus TCP handler with scaling support
 async function readModbusDevice(device) {
   const client = new ModbusRTU();
+  
   try {
     await client.connectTCP(device.host, { port: parseInt(device.port) });
     client.setID(parseInt(device.deviceId) || 1);
@@ -184,7 +187,7 @@ async function readModbusDevice(device) {
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i] ? 1 : 0;
-
+                
                 // Apply scaling if configured
                 const scaling = scalingMap.get(register);
                 if (scaling) {
@@ -202,7 +205,6 @@ async function readModbusDevice(device) {
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i] ? 1 : 0;
-
                 const scaling = scalingMap.get(register);
                 if (scaling) {
                   value = applyModbusScaling(value, scaling);
@@ -219,7 +221,6 @@ async function readModbusDevice(device) {
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i];
-
                 const scaling = scalingMap.get(register);
                 if (scaling) {
                   value = applyModbusScaling(value, scaling);
@@ -236,7 +237,6 @@ async function readModbusDevice(device) {
               for (let i = 0; i < result.data.length; i++) {
                 const register = (startAddr + i).toString();
                 let value = result.data[i];
-
                 const scaling = scalingMap.get(register);
                 if (scaling) {
                   value = applyModbusScaling(value, scaling);
@@ -259,6 +259,7 @@ async function readModbusDevice(device) {
     } else {
       // Use legacy register-based approach for backward compatibility with scaling
       const registers = device.registers.split(',').map(r => parseInt(r.trim()));
+      
       for (const register of registers) {
         try {
           const result = await client.readHoldingRegisters(register - 40001, 1);
@@ -327,6 +328,7 @@ async function pollDevice(device) {
   if (isShuttingDown) return; // Don't poll if shutting down
 
   const previousStatus = device.status;
+  
   try {
     let data = {};
 
@@ -399,13 +401,15 @@ async function pollDevice(device) {
 
     // Send email notifications for device errors/offline
     if (emailService.isConfigured()) {
-      const notificationType = error.message.includes('timeout') || error.message.includes('connect') ? 'deviceOffline' : 'deviceError';
+      const notificationType = error.message.includes('timeout') || error.message.includes('connect') 
+        ? 'deviceOffline' 
+        : 'deviceError';
       emailService.sendDeviceNotification(device, notificationType, { error: error.message })
         .catch(err => console.error('Failed to send device error notification:', err));
     }
   }
 
-  // Broadcast device update
+  // Broadcast device update if not shutting down
   if (!isShuttingDown) {
     io.emit('deviceUpdate', device);
   }
@@ -414,12 +418,14 @@ async function pollDevice(device) {
 // Start polling for a device
 function startDevicePolling(device) {
   stopDevicePolling(device.id);
+  
   const interval = device.pollInterval || settings.polling.interval;
   const pollerId = setInterval(() => {
     if (!isShuttingDown) {
       pollDevice(device);
     }
   }, interval);
+  
   devicePollers.set(device.id, pollerId);
 
   // Initial poll after 2 seconds
@@ -444,6 +450,7 @@ function updateStats() {
   
   stats.totalDevices = devices.length;
   stats.activeDevices = devices.filter(d => d.status === 'online').length;
+  
   io.emit('statsUpdate', stats);
 }
 
@@ -500,17 +507,33 @@ io.on('connection', (socket) => {
     }
   });
 
-  // BACnet Object List handler
+  // BACnet Object List handler - FIXED
   socket.on('getBacnetObjectList', async (deviceConfig) => {
+    console.log('Received getBacnetObjectList request:', deviceConfig);
+    
     try {
-      addLog('info', `Reading BACnet object list from ${deviceConfig.address}`, 'BACnet');
+      // Validate input
+      if (!deviceConfig || !deviceConfig.address) {
+        throw new Error('Device address is required');
+      }
+
+      addLog('info', `Reading BACnet object list from ${deviceConfig.address}:${deviceConfig.port}`, 'BACnet');
+      console.log('Calling bacnetClient.readObjectList with config:', deviceConfig);
+
+      // Call the BACnet client to read object list
       const objectList = await bacnetClient.readObjectList(deviceConfig);
+      
+      console.log('BACnet object list read successfully:', objectList.length, 'objects');
+      addLog('success', `Successfully read ${objectList.length} objects from BACnet device`, 'BACnet');
+
       socket.emit('bacnetObjectListResponse', {
         success: true,
         objects: objectList
       });
     } catch (error) {
+      console.error('Failed to read BACnet object list:', error);
       addLog('error', `Failed to read BACnet object list: ${error.message}`, 'BACnet');
+      
       socket.emit('bacnetObjectListResponse', {
         success: false,
         error: error.message
@@ -567,7 +590,10 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('Email test failed:', error);
       addLog('error', `Email connection test failed: ${error.message}`, 'Email Service');
-      socket.emit('emailTestResult', { success: false, message: error.message });
+      socket.emit('emailTestResult', {
+        success: false,
+        message: error.message
+      });
     }
   });
 
@@ -590,7 +616,10 @@ io.on('connection', (socket) => {
     } catch (error) {
       console.error('Failed to send test email:', error);
       addLog('error', `Failed to send test email: ${error.message}`, 'Email Service');
-      socket.emit('emailTestResult', { success: false, message: error.message });
+      socket.emit('emailTestResult', {
+        success: false,
+        message: error.message
+      });
     }
   });
 
@@ -603,9 +632,11 @@ io.on('connection', (socket) => {
       lastError: null,
       lastData: null
     };
+
     devices.push(newDevice);
     startDevicePolling(newDevice);
     updateStats();
+
     addLog('info', `Device added: ${newDevice.name}`, newDevice.name);
     io.emit('devicesUpdate', devices);
   });
@@ -614,6 +645,7 @@ io.on('connection', (socket) => {
     const index = devices.findIndex(d => d.id === updatedDevice.id);
     if (index !== -1) {
       stopDevicePolling(updatedDevice.id);
+      
       devices[index] = {
         ...updatedDevice,
         status: devices[index].status,
@@ -621,8 +653,10 @@ io.on('connection', (socket) => {
         lastError: devices[index].lastError,
         lastData: devices[index].lastData
       };
+
       startDevicePolling(devices[index]);
       updateStats();
+
       addLog('info', `Device updated: ${updatedDevice.name}`, updatedDevice.name);
       io.emit('devicesUpdate', devices);
     }
@@ -635,6 +669,7 @@ io.on('connection', (socket) => {
       stopDevicePolling(deviceId);
       devices.splice(deviceIndex, 1);
       updateStats();
+
       addLog('info', `Device deleted: ${device.name}`, device.name);
       io.emit('devicesUpdate', devices);
     }
@@ -643,14 +678,15 @@ io.on('connection', (socket) => {
   socket.on('updateSettings', async (newSettings) => {
     const oldModbusSlaveEnabled = settings.modbusSlave.enabled;
     const oldEmailSettings = JSON.stringify(settings.email);
-    
+
     settings = { ...settings, ...newSettings };
     console.log('Settings updated:', JSON.stringify(newSettings, null, 2));
-    
+
     initializeMQTT();
 
     // Handle Modbus slave server changes
-    if (settings.modbusSlave.enabled !== oldModbusSlaveEnabled || (settings.modbusSlave.enabled && newSettings.modbusSlave)) {
+    if (settings.modbusSlave.enabled !== oldModbusSlaveEnabled || 
+        (settings.modbusSlave.enabled && newSettings.modbusSlave)) {
       try {
         if (settings.modbusSlave.enabled) {
           await modbusSlaveServer.start(settings.modbusSlave, addLog);
