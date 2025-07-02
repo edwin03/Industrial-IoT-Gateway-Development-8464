@@ -1,69 +1,69 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React,{useState,useEffect} from 'react';
+import {motion,AnimatePresence} from 'framer-motion';
 import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
-import { useGateway } from '../context/GatewayContext';
+import {useGateway} from '../context/GatewayContext';
 import DeviceTemplates from './DeviceTemplates';
 import BACnetDiscovery from './BACnetDiscovery';
 import BACnetObjectBrowser from './BACnetObjectBrowser';
 
-const { FiX, FiSave, FiTemplate, FiPlus, FiTrash2, FiInfo, FiSearch, FiEye, FiSettings } = FiIcons;
+const {FiX,FiSave,FiTemplate,FiPlus,FiTrash2,FiInfo,FiSearch,FiEye,FiSettings}=FiIcons;
 
 // Modbus function codes and their descriptions
-const MODBUS_FUNCTIONS = [
-  { code: 1, name: 'Read Coils', description: 'Read discrete outputs (00001-09999)', addressPrefix: '0' },
-  { code: 2, name: 'Read Discrete Inputs', description: 'Read discrete inputs (10001-19999)', addressPrefix: '1' },
-  { code: 3, name: 'Read Holding Registers', description: 'Read analog outputs (40001-49999)', addressPrefix: '4' },
-  { code: 4, name: 'Read Input Registers', description: 'Read analog inputs (30001-39999)', addressPrefix: '3' },
-  { code: 5, name: 'Write Single Coil', description: 'Write single discrete output', addressPrefix: '0' },
-  { code: 6, name: 'Write Single Register', description: 'Write single analog output', addressPrefix: '4' },
-  { code: 15, name: 'Write Multiple Coils', description: 'Write multiple discrete outputs', addressPrefix: '0' },
-  { code: 16, name: 'Write Multiple Registers', description: 'Write multiple analog outputs', addressPrefix: '4' }
+const MODBUS_FUNCTIONS=[
+  {code: 1,name: 'Read Coils',description: 'Read discrete outputs (00001-09999)',addressPrefix: '0'},
+  {code: 2,name: 'Read Discrete Inputs',description: 'Read discrete inputs (10001-19999)',addressPrefix: '1'},
+  {code: 3,name: 'Read Holding Registers',description: 'Read analog outputs (40001-49999)',addressPrefix: '4'},
+  {code: 4,name: 'Read Input Registers',description: 'Read analog inputs (30001-39999)',addressPrefix: '3'},
+  {code: 5,name: 'Write Single Coil',description: 'Write single discrete output',addressPrefix: '0'},
+  {code: 6,name: 'Write Single Register',description: 'Write single analog output',addressPrefix: '4'},
+  {code: 15,name: 'Write Multiple Coils',description: 'Write multiple discrete outputs',addressPrefix: '0'},
+  {code: 16,name: 'Write Multiple Registers',description: 'Write multiple analog outputs',addressPrefix: '4'}
 ];
 
-const READ_FUNCTIONS = [1, 2, 3, 4];
+const READ_FUNCTIONS=[1,2,3,4];
 
 // Common scaling presets
-const SCALING_PRESETS = [
-  { name: 'No Scaling', multiplier: 1, offset: 0, decimals: 0, unit: '' },
-  { name: 'Temperature (°C)', multiplier: 0.1, offset: 0, decimals: 1, unit: '°C' },
-  { name: 'Temperature (°F)', multiplier: 0.1, offset: 32, decimals: 1, unit: '°F' },
-  { name: 'Pressure (kPa)', multiplier: 0.1, offset: 0, decimals: 1, unit: 'kPa' },
-  { name: 'Flow (L/min)', multiplier: 0.01, offset: 0, decimals: 2, unit: 'L/min' },
-  { name: 'Percentage (%)', multiplier: 0.01, offset: 0, decimals: 1, unit: '%' },
-  { name: 'Voltage (V)', multiplier: 0.001, offset: 0, decimals: 3, unit: 'V' },
-  { name: 'Current (A)', multiplier: 0.001, offset: 0, decimals: 3, unit: 'A' },
-  { name: 'Power (W)', multiplier: 1, offset: 0, decimals: 0, unit: 'W' },
-  { name: 'Energy (kWh)', multiplier: 0.001, offset: 0, decimals: 3, unit: 'kWh' }
+const SCALING_PRESETS=[
+  {name: 'No Scaling',multiplier: 1,offset: 0,decimals: 0,unit: ''},
+  {name: 'Temperature (°C)',multiplier: 0.1,offset: 0,decimals: 1,unit: '°C'},
+  {name: 'Temperature (°F)',multiplier: 0.1,offset: 32,decimals: 1,unit: '°F'},
+  {name: 'Pressure (kPa)',multiplier: 0.1,offset: 0,decimals: 1,unit: 'kPa'},
+  {name: 'Flow (L/min)',multiplier: 0.01,offset: 0,decimals: 2,unit: 'L/min'},
+  {name: 'Percentage (%)',multiplier: 0.01,offset: 0,decimals: 1,unit: '%'},
+  {name: 'Voltage (V)',multiplier: 0.001,offset: 0,decimals: 3,unit: 'V'},
+  {name: 'Current (A)',multiplier: 0.001,offset: 0,decimals: 3,unit: 'A'},
+  {name: 'Power (W)',multiplier: 1,offset: 0,decimals: 0,unit: 'W'},
+  {name: 'Energy (kWh)',multiplier: 0.001,offset: 0,decimals: 3,unit: 'kWh'}
 ];
 
 // BACnet Object Types
-const BACNET_OBJECT_TYPES = [
-  { value: 'analog-input', label: 'Analog Input (AI)', description: 'Analog sensor values' },
-  { value: 'analog-output', label: 'Analog Output (AO)', description: 'Analog control outputs' },
-  { value: 'analog-value', label: 'Analog Value (AV)', description: 'Analog variables' },
-  { value: 'binary-input', label: 'Binary Input (BI)', description: 'Digital sensor states' },
-  { value: 'binary-output', label: 'Binary Output (BO)', description: 'Digital control outputs' },
-  { value: 'binary-value', label: 'Binary Value (BV)', description: 'Digital variables' },
-  { value: 'multi-state-input', label: 'Multi-State Input (MI)', description: 'Enumerated inputs' },
-  { value: 'multi-state-output', label: 'Multi-State Output (MO)', description: 'Enumerated outputs' },
-  { value: 'multi-state-value', label: 'Multi-State Value (MV)', description: 'Enumerated variables' },
-  { value: 'device', label: 'Device (DEV)', description: 'Device object' },
-  { value: 'file', label: 'File', description: 'File objects' },
-  { value: 'group', label: 'Group', description: 'Group objects' },
-  { value: 'loop', label: 'Loop', description: 'Control loop objects' },
-  { value: 'notification-class', label: 'Notification Class', description: 'Alarm notification' },
-  { value: 'program', label: 'Program', description: 'Program objects' },
-  { value: 'schedule', label: 'Schedule', description: 'Scheduling objects' },
-  { value: 'averaging', label: 'Averaging', description: 'Averaging objects' },
-  { value: 'trend-log', label: 'Trend Log', description: 'Historical data logging' },
-  { value: 'life-safety-point', label: 'Life Safety Point', description: 'Life safety systems' },
-  { value: 'life-safety-zone', label: 'Life Safety Zone', description: 'Life safety zones' }
+const BACNET_OBJECT_TYPES=[
+  {value: 'analog-input',label: 'Analog Input (AI)',description: 'Analog sensor values'},
+  {value: 'analog-output',label: 'Analog Output (AO)',description: 'Analog control outputs'},
+  {value: 'analog-value',label: 'Analog Value (AV)',description: 'Analog variables'},
+  {value: 'binary-input',label: 'Binary Input (BI)',description: 'Digital sensor states'},
+  {value: 'binary-output',label: 'Binary Output (BO)',description: 'Digital control outputs'},
+  {value: 'binary-value',label: 'Binary Value (BV)',description: 'Digital variables'},
+  {value: 'multi-state-input',label: 'Multi-State Input (MI)',description: 'Enumerated inputs'},
+  {value: 'multi-state-output',label: 'Multi-State Output (MO)',description: 'Enumerated outputs'},
+  {value: 'multi-state-value',label: 'Multi-State Value (MV)',description: 'Enumerated variables'},
+  {value: 'device',label: 'Device (DEV)',description: 'Device object'},
+  {value: 'file',label: 'File',description: 'File objects'},
+  {value: 'group',label: 'Group',description: 'Group objects'},
+  {value: 'loop',label: 'Loop',description: 'Control loop objects'},
+  {value: 'notification-class',label: 'Notification Class',description: 'Alarm notification'},
+  {value: 'program',label: 'Program',description: 'Program objects'},
+  {value: 'schedule',label: 'Schedule',description: 'Scheduling objects'},
+  {value: 'averaging',label: 'Averaging',description: 'Averaging objects'},
+  {value: 'trend-log',label: 'Trend Log',description: 'Historical data logging'},
+  {value: 'life-safety-point',label: 'Life Safety Point',description: 'Life safety systems'},
+  {value: 'life-safety-zone',label: 'Life Safety Zone',description: 'Life safety zones'}
 ];
 
-function DeviceModal({ isOpen, onClose, device }) {
-  const { addDevice, updateDevice } = useGateway();
-  const [formData, setFormData] = useState({
+function DeviceModal({isOpen,onClose,device}) {
+  const {addDevice,updateDevice}=useGateway();
+  const [formData,setFormData]=useState({
     name: '',
     description: '',
     protocol: 'modbus',
@@ -86,16 +86,17 @@ function DeviceModal({ isOpen, onClose, device }) {
       segmentationSupported: 'segmented-both',
       vendorId: '',
       objectList: [],
-      objectInstances: [] // New: Array of {instance, objectType, name, description}
+      objectInstances: [] // New: Array of {instance,objectType,name,description}
     }
   });
-  const [showTemplates, setShowTemplates] = useState(false);
-  const [showBACnetDiscovery, setShowBACnetDiscovery] = useState(false);
-  const [showBACnetObjectBrowser, setShowBACnetObjectBrowser] = useState(false);
-  const [showModbusHelper, setShowModbusHelper] = useState(false);
-  const [showBACnetHelper, setShowBACnetHelper] = useState(false);
+  
+  const [showTemplates,setShowTemplates]=useState(false);
+  const [showBACnetDiscovery,setShowBACnetDiscovery]=useState(false);
+  const [showBACnetObjectBrowser,setShowBACnetObjectBrowser]=useState(false);
+  const [showModbusHelper,setShowModbusHelper]=useState(false);
+  const [showBACnetHelper,setShowBACnetHelper]=useState(false);
 
-  useEffect(() => {
+  useEffect(()=> {
     if (device) {
       setFormData({
         ...device,
@@ -143,37 +144,37 @@ function DeviceModal({ isOpen, onClose, device }) {
         }
       });
     }
-  }, [device, isOpen]);
+  },[device,isOpen]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit=(e)=> {
     e.preventDefault();
-
+    
     // Validate required fields
     if (!formData.name || !formData.host || !formData.port) {
-      alert('Please fill in all required fields (Name, Host, Port)');
+      alert('Please fill in all required fields (Name,Host,Port)');
       return;
     }
 
     // Generate registers string from Modbus functions if protocol is Modbus
-    let finalRegisters = formData.registers;
-    if (formData.protocol === 'modbus' && formData.modbusConfig.functions.length > 0) {
-      finalRegisters = formData.modbusConfig.functions
-        .map(func => `${func.functionCode}:${func.startAddress}:${func.quantity}`)
+    let finalRegisters=formData.registers;
+    if (formData.protocol==='modbus' && formData.modbusConfig.functions.length > 0) {
+      finalRegisters=formData.modbusConfig.functions
+        .map(func=> `${func.functionCode}:${func.startAddress}:${func.quantity}`)
         .join(',');
     }
 
-    // For BACnet, generate registers from object instances
-    if (formData.protocol === 'bacnet') {
+    // For BACnet,generate registers from object instances
+    if (formData.protocol==='bacnet') {
       if (formData.bacnetConfig.objectInstances.length > 0) {
         // Use configured object instances
-        finalRegisters = formData.bacnetConfig.objectInstances
-          .map(obj => `${obj.objectType}:${obj.instance}`)
+        finalRegisters=formData.bacnetConfig.objectInstances
+          .map(obj=> `${obj.objectType}:${obj.instance}`)
           .join(',');
       } else if (formData.bacnetConfig.objectList.length > 0) {
         // Fallback to object list
-        finalRegisters = formData.bacnetConfig.objectList
-          .map((obj, index) => obj.instance !== undefined ? obj.instance : index)
-          .slice(0, 10)
+        finalRegisters=formData.bacnetConfig.objectList
+          .map((obj,index)=> obj.instance !==undefined ? obj.instance : index)
+          .slice(0,10)
           .join(',');
       }
     }
@@ -182,20 +183,20 @@ function DeviceModal({ isOpen, onClose, device }) {
     if (!finalRegisters) {
       switch (formData.protocol) {
         case 'modbus':
-          finalRegisters = '40001,40002,40003,40004,40005';
+          finalRegisters='40001,40002,40003,40004,40005';
           break;
         case 'bacnet':
-          finalRegisters = 'analog-input:0,analog-input:1,analog-input:2,binary-input:0,binary-output:0';
+          finalRegisters='analog-input:0,analog-input:1,analog-input:2,binary-input:0,binary-output:0';
           break;
         case 'snmp':
-          finalRegisters = '1.3.6.1.2.1.1.1.0,1.3.6.1.2.1.1.3.0';
+          finalRegisters='1.3.6.1.2.1.1.1.0,1.3.6.1.2.1.1.3.0';
           break;
         default:
-          finalRegisters = '1,2,3,4,5';
+          finalRegisters='1,2,3,4,5';
       }
     }
 
-    const deviceData = {
+    const deviceData={
       ...formData,
       registers: finalRegisters,
       id: device?.id || Date.now().toString(),
@@ -212,16 +213,16 @@ function DeviceModal({ isOpen, onClose, device }) {
     onClose();
   };
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
+  const handleChange=(e)=> {
+    const {name,value}=e.target;
+    setFormData(prev=> ({
       ...prev,
       [name]: value
     }));
   };
 
-  const handleModbusConfigChange = (field, value) => {
-    setFormData(prev => ({
+  const handleModbusConfigChange=(field,value)=> {
+    setFormData(prev=> ({
       ...prev,
       modbusConfig: {
         ...prev.modbusConfig,
@@ -230,8 +231,8 @@ function DeviceModal({ isOpen, onClose, device }) {
     }));
   };
 
-  const handleBACnetConfigChange = (field, value) => {
-    setFormData(prev => ({
+  const handleBACnetConfigChange=(field,value)=> {
+    setFormData(prev=> ({
       ...prev,
       bacnetConfig: {
         ...prev.bacnetConfig,
@@ -240,7 +241,7 @@ function DeviceModal({ isOpen, onClose, device }) {
     }));
   };
 
-  const getDefaultPort = (protocol) => {
+  const getDefaultPort=(protocol)=> {
     switch (protocol) {
       case 'modbus': return '502';
       case 'bacnet': return '47808';
@@ -249,17 +250,17 @@ function DeviceModal({ isOpen, onClose, device }) {
     }
   };
 
-  const handleProtocolChange = (e) => {
-    const protocol = e.target.value;
-    setFormData(prev => ({
+  const handleProtocolChange=(e)=> {
+    const protocol=e.target.value;
+    setFormData(prev=> ({
       ...prev,
       protocol,
       port: getDefaultPort(protocol)
     }));
   };
 
-  const handleTemplateSelect = (template) => {
-    setFormData(prev => ({
+  const handleTemplateSelect=(template)=> {
+    setFormData(prev=> ({
       ...prev,
       name: template.name,
       description: template.description,
@@ -273,9 +274,9 @@ function DeviceModal({ isOpen, onClose, device }) {
     }));
   };
 
-  const handleBACnetDeviceSelect = (deviceConfig) => {
-    console.log('BACnet device selected:', deviceConfig);
-    setFormData(prev => ({
+  const handleBACnetDeviceSelect=(deviceConfig)=> {
+    console.log('BACnet device selected:',deviceConfig);
+    setFormData(prev=> ({
       ...prev,
       ...deviceConfig,
       bacnetConfig: deviceConfig.bacnetConfig || prev.bacnetConfig
@@ -283,11 +284,11 @@ function DeviceModal({ isOpen, onClose, device }) {
     setShowBACnetDiscovery(false);
   };
 
-  const handleBACnetObjectsSelect = (selectedObjects) => {
-    console.log('BACnet objects selected:', selectedObjects);
+  const handleBACnetObjectsSelect=(selectedObjects)=> {
+    console.log('BACnet objects selected:',selectedObjects);
     
     // Convert selected objects to object instances format
-    const objectInstances = selectedObjects.map((obj, index) => ({
+    const objectInstances=selectedObjects.map((obj,index)=> ({
       id: Date.now() + index,
       instance: obj.instance || index,
       objectType: obj.objectType || 'analog-input',
@@ -296,82 +297,82 @@ function DeviceModal({ isOpen, onClose, device }) {
     }));
 
     // Update object list and instances in BACnet config
-    const updatedBACnetConfig = {
+    const updatedBACnetConfig={
       ...formData.bacnetConfig,
       objectList: selectedObjects,
       objectInstances: objectInstances
     };
 
-    setFormData(prev => ({
+    setFormData(prev=> ({
       ...prev,
       bacnetConfig: updatedBACnetConfig
     }));
-
+    
     setShowBACnetObjectBrowser(false);
   };
 
   // BACnet Object Instance Management
-  const addBACnetObjectInstance = () => {
-    const newInstance = {
+  const addBACnetObjectInstance=()=> {
+    const newInstance={
       id: Date.now(),
       instance: 0,
       objectType: 'analog-input',
       name: 'New Object',
       description: ''
     };
-
-    handleBACnetConfigChange('objectInstances', [
+    
+    handleBACnetConfigChange('objectInstances',[
       ...formData.bacnetConfig.objectInstances,
       newInstance
     ]);
   };
 
-  const removeBACnetObjectInstance = (id) => {
+  const removeBACnetObjectInstance=(id)=> {
     handleBACnetConfigChange('objectInstances',
-      formData.bacnetConfig.objectInstances.filter(obj => obj.id !== id)
+      formData.bacnetConfig.objectInstances.filter(obj=> obj.id !==id)
     );
   };
 
-  const updateBACnetObjectInstance = (id, field, value) => {
+  const updateBACnetObjectInstance=(id,field,value)=> {
     handleBACnetConfigChange('objectInstances',
-      formData.bacnetConfig.objectInstances.map(obj =>
-        obj.id === id ? { ...obj, [field]: value } : obj
+      formData.bacnetConfig.objectInstances.map(obj=>
+        obj.id===id ? {...obj,[field]: value} : obj
       )
     );
   };
 
-  const addModbusFunction = () => {
-    const newFunction = {
+  const addModbusFunction=()=> {
+    const newFunction={
       id: Date.now(),
       functionCode: 3,
       startAddress: 40001,
       quantity: 1,
       name: 'Register'
     };
-
-    handleModbusConfigChange('functions', [
+    
+    handleModbusConfigChange('functions',[
       ...formData.modbusConfig.functions,
       newFunction
     ]);
   };
 
-  const removeModbusFunction = (id) => {
+  const removeModbusFunction=(id)=> {
     handleModbusConfigChange('functions',
-      formData.modbusConfig.functions.filter(func => func.id !== id)
+      formData.modbusConfig.functions.filter(func=> func.id !==id)
     );
   };
 
-  const updateModbusFunction = (id, field, value) => {
+  const updateModbusFunction=(id,field,value)=> {
     handleModbusConfigChange('functions',
-      formData.modbusConfig.functions.map(func =>
-        func.id === id ? { ...func, [field]: value } : func
+      formData.modbusConfig.functions.map(func=>
+        func.id===id ? {...func,[field]: value} : func
       )
     );
   };
 
   // Scaling configuration functions
-  const addScalingConfig = () => {
-    const newScaling = {
+  const addScalingConfig=()=> {
+    const newScaling={
       id: Date.now(),
       register: '',
       name: '',
@@ -381,78 +382,78 @@ function DeviceModal({ isOpen, onClose, device }) {
       unit: '',
       enabled: true
     };
-
-    handleModbusConfigChange('scaling', [
+    
+    handleModbusConfigChange('scaling',[
       ...formData.modbusConfig.scaling,
       newScaling
     ]);
   };
 
-  const removeScalingConfig = (id) => {
+  const removeScalingConfig=(id)=> {
     handleModbusConfigChange('scaling',
-      formData.modbusConfig.scaling.filter(scale => scale.id !== id)
+      formData.modbusConfig.scaling.filter(scale=> scale.id !==id)
     );
   };
 
-  const updateScalingConfig = (id, field, value) => {
+  const updateScalingConfig=(id,field,value)=> {
     handleModbusConfigChange('scaling',
-      formData.modbusConfig.scaling.map(scale =>
-        scale.id === id ? { ...scale, [field]: value } : scale
+      formData.modbusConfig.scaling.map(scale=>
+        scale.id===id ? {...scale,[field]: value} : scale
       )
     );
   };
 
-  const applyScalingPreset = (scalingId, preset) => {
-    updateScalingConfig(scalingId, 'multiplier', preset.multiplier);
-    updateScalingConfig(scalingId, 'offset', preset.offset);
-    updateScalingConfig(scalingId, 'decimals', preset.decimals);
-    updateScalingConfig(scalingId, 'unit', preset.unit);
+  const applyScalingPreset=(scalingId,preset)=> {
+    updateScalingConfig(scalingId,'multiplier',preset.multiplier);
+    updateScalingConfig(scalingId,'offset',preset.offset);
+    updateScalingConfig(scalingId,'decimals',preset.decimals);
+    updateScalingConfig(scalingId,'unit',preset.unit);
   };
 
-  const getAvailableRegisters = () => {
-    const registers = new Set();
+  const getAvailableRegisters=()=> {
+    const registers=new Set();
     
     // From functions
-    formData.modbusConfig.functions.forEach(func => {
-      for (let i = 0; i < func.quantity; i++) {
+    formData.modbusConfig.functions.forEach(func=> {
+      for (let i=0;i < func.quantity;i++) {
         registers.add((func.startAddress + i).toString());
       }
     });
-
+    
     // From legacy registers string
     if (formData.registers) {
-      formData.registers.split(',').forEach(reg => {
-        const regNum = reg.trim();
+      formData.registers.split(',').forEach(reg=> {
+        const regNum=reg.trim();
         if (regNum && !regNum.includes(':')) {
           registers.add(regNum);
         }
       });
     }
 
-    return Array.from(registers).sort((a, b) => parseInt(a) - parseInt(b));
+    return Array.from(registers).sort((a,b)=> parseInt(a) - parseInt(b));
   };
 
-  const getFunctionInfo = (functionCode) => {
-    return MODBUS_FUNCTIONS.find(f => f.code === functionCode);
+  const getFunctionInfo=(functionCode)=> {
+    return MODBUS_FUNCTIONS.find(f=> f.code===functionCode);
   };
 
-  const validateModbusAddress = (functionCode, address) => {
-    const func = getFunctionInfo(functionCode);
+  const validateModbusAddress=(functionCode,address)=> {
+    const func=getFunctionInfo(functionCode);
     if (!func) return false;
-
-    const addressNum = parseInt(address);
-    const prefix = func.addressPrefix;
-    const expectedStart = parseInt(prefix + '0001');
-    const expectedEnd = parseInt(prefix + '9999');
-
-    return addressNum >= expectedStart && addressNum <= expectedEnd;
+    
+    const addressNum=parseInt(address);
+    const prefix=func.addressPrefix;
+    const expectedStart=parseInt(prefix + '0001');
+    const expectedEnd=parseInt(prefix + '9999');
+    
+    return addressNum >=expectedStart && addressNum <=expectedEnd;
   };
 
-  const generateSampleAddresses = (functionCode) => {
-    const func = getFunctionInfo(functionCode);
+  const generateSampleAddresses=(functionCode)=> {
+    const func=getFunctionInfo(functionCode);
     if (!func) return [];
-
-    const prefix = func.addressPrefix;
+    
+    const prefix=func.addressPrefix;
     return [
       `${prefix}0001`,
       `${prefix}0010`,
@@ -461,17 +462,17 @@ function DeviceModal({ isOpen, onClose, device }) {
     ];
   };
 
-  const calculateScaledValue = (rawValue, scaling) => {
+  const calculateScaledValue=(rawValue,scaling)=> {
     if (!scaling.enabled) return rawValue;
-    const scaled = (rawValue * scaling.multiplier) + scaling.offset;
+    const scaled=(rawValue * scaling.multiplier) + scaling.offset;
     return parseFloat(scaled.toFixed(scaling.decimals));
   };
 
-  const getObjectTypeInfo = (objectType) => {
-    return BACNET_OBJECT_TYPES.find(type => type.value === objectType);
+  const getObjectTypeInfo=(objectType)=> {
+    return BACNET_OBJECT_TYPES.find(type=> type.value===objectType);
   };
 
-  const getObjectTypeIcon = (objectType) => {
+  const getObjectTypeIcon=(objectType)=> {
     switch (objectType) {
       case 'analog-input':
       case 'analog-output':
@@ -501,20 +502,21 @@ function DeviceModal({ isOpen, onClose, device }) {
   if (!isOpen) return null;
 
   return (
-    <AnimatePresence>
+    <>
+      {/* Main Device Modal */}
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        initial={{opacity: 0}}
+        animate={{opacity: 1}}
+        exit={{opacity: 0}}
         className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
         onClick={onClose}
       >
         <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          exit={{ scale: 0.9, opacity: 0 }}
+          initial={{scale: 0.9,opacity: 0}}
+          animate={{scale: 1,opacity: 1}}
+          exit={{scale: 0.9,opacity: 0}}
           className="bg-white rounded-lg shadow-xl max-w-6xl w-full mx-4 max-h-[90vh] overflow-y-auto"
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e)=> e.stopPropagation()}
         >
           <div className="flex items-center justify-between p-6 border-b border-gray-200">
             <h3 className="text-lg font-semibold text-gray-900">
@@ -524,19 +526,19 @@ function DeviceModal({ isOpen, onClose, device }) {
               {!device && (
                 <>
                   <motion.button
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowTemplates(true)}
+                    whileHover={{scale: 1.05}}
+                    whileTap={{scale: 0.95}}
+                    onClick={()=> setShowTemplates(true)}
                     className="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-gray-200 transition-colors text-sm"
                   >
                     <SafeIcon icon={FiTemplate} className="w-4 h-4" />
                     <span>Templates</span>
                   </motion.button>
-                  {formData.protocol === 'bacnet' && (
+                  {formData.protocol==='bacnet' && (
                     <motion.button
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowBACnetDiscovery(true)}
+                      whileHover={{scale: 1.05}}
+                      whileTap={{scale: 0.95}}
+                      onClick={()=> setShowBACnetDiscovery(true)}
                       className="bg-green-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors text-sm font-medium"
                     >
                       <SafeIcon icon={FiSearch} className="w-4 h-4" />
@@ -601,7 +603,7 @@ function DeviceModal({ isOpen, onClose, device }) {
             </div>
 
             {/* BACnet Discovery Button in Form */}
-            {formData.protocol === 'bacnet' && !device && (
+            {formData.protocol==='bacnet' && !device && (
               <div className="bg-green-50 border border-green-200 rounded-lg p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-start space-x-3">
@@ -615,9 +617,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                   </div>
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowBACnetDiscovery(true)}
+                    whileHover={{scale: 1.05}}
+                    whileTap={{scale: 0.95}}
+                    onClick={()=> setShowBACnetDiscovery(true)}
                     className="bg-green-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors font-medium"
                   >
                     <SafeIcon icon={FiSearch} className="w-5 h-5" />
@@ -658,29 +660,29 @@ function DeviceModal({ isOpen, onClose, device }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {formData.protocol === 'modbus' ? 'Unit ID' : 'Device ID'}
+                  {formData.protocol==='modbus' ? 'Unit ID' : 'Device ID'}
                 </label>
                 <input
                   type="text"
                   name="deviceId"
                   value={formData.deviceId}
                   onChange={handleChange}
-                  placeholder={formData.protocol === 'snmp' ? 'public' : '1'}
+                  placeholder={formData.protocol==='snmp' ? 'public' : '1'}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             </div>
 
             {/* Modbus-specific Configuration */}
-            {formData.protocol === 'modbus' && (
+            {formData.protocol==='modbus' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-gray-900">Modbus Configuration</h4>
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.05 }}
-                    whileTap={{ scale: 0.95 }}
-                    onClick={() => setShowModbusHelper(!showModbusHelper)}
+                    whileHover={{scale: 1.05}}
+                    whileTap={{scale: 0.95}}
+                    onClick={()=> setShowModbusHelper(!showModbusHelper)}
                     className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-blue-200 transition-colors text-sm"
                   >
                     <SafeIcon icon={FiSettings} className="w-4 h-4" />
@@ -696,8 +698,8 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </label>
                     <motion.button
                       type="button"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={{scale: 1.05}}
+                      whileTap={{scale: 0.95}}
                       onClick={addModbusFunction}
                       className="bg-primary-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors text-sm"
                     >
@@ -706,7 +708,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </motion.button>
                   </div>
 
-                  {formData.modbusConfig.functions.length === 0 ? (
+                  {formData.modbusConfig.functions.length===0 ? (
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                       <SafeIcon icon={FiSettings} className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                       <p className="text-gray-600 mb-2">No Modbus functions configured</p>
@@ -714,7 +716,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {formData.modbusConfig.functions.map((func) => (
+                      {formData.modbusConfig.functions.map((func)=> (
                         <div key={func.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                             <div>
@@ -723,10 +725,10 @@ function DeviceModal({ isOpen, onClose, device }) {
                               </label>
                               <select
                                 value={func.functionCode}
-                                onChange={(e) => updateModbusFunction(func.id, 'functionCode', parseInt(e.target.value))}
+                                onChange={(e)=> updateModbusFunction(func.id,'functionCode',parseInt(e.target.value))}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                               >
-                                {MODBUS_FUNCTIONS.filter(f => READ_FUNCTIONS.includes(f.code)).map(f => (
+                                {MODBUS_FUNCTIONS.filter(f=> READ_FUNCTIONS.includes(f.code)).map(f=> (
                                   <option key={f.code} value={f.code}>
                                     FC{f.code} - {f.name}
                                   </option>
@@ -740,7 +742,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                               <input
                                 type="number"
                                 value={func.startAddress}
-                                onChange={(e) => updateModbusFunction(func.id, 'startAddress', parseInt(e.target.value))}
+                                onChange={(e)=> updateModbusFunction(func.id,'startAddress',parseInt(e.target.value))}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                               />
                             </div>
@@ -751,7 +753,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                               <input
                                 type="number"
                                 value={func.quantity}
-                                onChange={(e) => updateModbusFunction(func.id, 'quantity', parseInt(e.target.value))}
+                                onChange={(e)=> updateModbusFunction(func.id,'quantity',parseInt(e.target.value))}
                                 min="1"
                                 max="125"
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
@@ -764,16 +766,16 @@ function DeviceModal({ isOpen, onClose, device }) {
                               <input
                                 type="text"
                                 value={func.name}
-                                onChange={(e) => updateModbusFunction(func.id, 'name', e.target.value)}
+                                onChange={(e)=> updateModbusFunction(func.id,'name',e.target.value)}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                               />
                             </div>
                             <div className="flex items-end">
                               <motion.button
                                 type="button"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => removeModbusFunction(func.id)}
+                                whileHover={{scale: 1.05}}
+                                whileTap={{scale: 0.95}}
+                                onClick={()=> removeModbusFunction(func.id)}
                                 className="text-red-600 hover:text-red-800 p-1"
                                 title="Remove function"
                               >
@@ -795,8 +797,8 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </label>
                     <motion.button
                       type="button"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={{scale: 1.05}}
+                      whileTap={{scale: 0.95}}
                       onClick={addScalingConfig}
                       className="bg-green-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-green-700 transition-colors text-sm"
                     >
@@ -805,18 +807,18 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </motion.button>
                   </div>
 
-                  {formData.modbusConfig.scaling.length === 0 ? (
+                  {formData.modbusConfig.scaling.length===0 ? (
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                       <SafeIcon icon={FiSettings} className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                       <p className="text-gray-600 mb-2">No scaling configured</p>
                       <p className="text-sm text-gray-500">Add scaling to convert raw values to engineering units</p>
                       <div className="mt-3 text-xs text-gray-500">
-                        <p>Formula: Scaled Value = (Raw Value × Multiplier) + Offset</p>
+                        <p>Formula: Scaled Value=(Raw Value × Multiplier) + Offset</p>
                       </div>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {formData.modbusConfig.scaling.map((scaling) => (
+                      {formData.modbusConfig.scaling.map((scaling)=> (
                         <div key={scaling.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
                           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                             {/* Basic Configuration */}
@@ -828,11 +830,11 @@ function DeviceModal({ isOpen, onClose, device }) {
                                   </label>
                                   <select
                                     value={scaling.register}
-                                    onChange={(e) => updateScalingConfig(scaling.id, 'register', e.target.value)}
+                                    onChange={(e)=> updateScalingConfig(scaling.id,'register',e.target.value)}
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   >
                                     <option value="">Select Register</option>
-                                    {getAvailableRegisters().map(reg => (
+                                    {getAvailableRegisters().map(reg=> (
                                       <option key={reg} value={reg}>{reg}</option>
                                     ))}
                                   </select>
@@ -844,13 +846,12 @@ function DeviceModal({ isOpen, onClose, device }) {
                                   <input
                                     type="text"
                                     value={scaling.name}
-                                    onChange={(e) => updateScalingConfig(scaling.id, 'name', e.target.value)}
-                                    placeholder="e.g., Temperature"
+                                    onChange={(e)=> updateScalingConfig(scaling.id,'name',e.target.value)}
+                                    placeholder="e.g.,Temperature"
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   />
                                 </div>
                               </div>
-
                               <div className="grid grid-cols-3 gap-3">
                                 <div>
                                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -860,7 +861,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                                     type="number"
                                     step="any"
                                     value={scaling.multiplier}
-                                    onChange={(e) => updateScalingConfig(scaling.id, 'multiplier', parseFloat(e.target.value))}
+                                    onChange={(e)=> updateScalingConfig(scaling.id,'multiplier',parseFloat(e.target.value))}
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   />
                                 </div>
@@ -872,7 +873,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                                     type="number"
                                     step="any"
                                     value={scaling.offset}
-                                    onChange={(e) => updateScalingConfig(scaling.id, 'offset', parseFloat(e.target.value))}
+                                    onChange={(e)=> updateScalingConfig(scaling.id,'offset',parseFloat(e.target.value))}
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   />
                                 </div>
@@ -885,12 +886,11 @@ function DeviceModal({ isOpen, onClose, device }) {
                                     min="0"
                                     max="6"
                                     value={scaling.decimals}
-                                    onChange={(e) => updateScalingConfig(scaling.id, 'decimals', parseInt(e.target.value))}
+                                    onChange={(e)=> updateScalingConfig(scaling.id,'decimals',parseInt(e.target.value))}
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   />
                                 </div>
                               </div>
-
                               <div className="grid grid-cols-2 gap-3">
                                 <div>
                                   <label className="block text-xs font-medium text-gray-700 mb-1">
@@ -899,8 +899,8 @@ function DeviceModal({ isOpen, onClose, device }) {
                                   <input
                                     type="text"
                                     value={scaling.unit}
-                                    onChange={(e) => updateScalingConfig(scaling.id, 'unit', e.target.value)}
-                                    placeholder="e.g., °C, %, kW"
+                                    onChange={(e)=> updateScalingConfig(scaling.id,'unit',e.target.value)}
+                                    placeholder="e.g.,°C,%,kW"
                                     className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   />
                                 </div>
@@ -909,16 +909,16 @@ function DeviceModal({ isOpen, onClose, device }) {
                                     <input
                                       type="checkbox"
                                       checked={scaling.enabled}
-                                      onChange={(e) => updateScalingConfig(scaling.id, 'enabled', e.target.checked)}
+                                      onChange={(e)=> updateScalingConfig(scaling.id,'enabled',e.target.checked)}
                                       className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
                                     />
                                     <span className="ml-2 text-xs text-gray-700">Enabled</span>
                                   </label>
                                   <motion.button
                                     type="button"
-                                    whileHover={{ scale: 1.05 }}
-                                    whileTap={{ scale: 0.95 }}
-                                    onClick={() => removeScalingConfig(scaling.id)}
+                                    whileHover={{scale: 1.05}}
+                                    whileTap={{scale: 0.95}}
+                                    onClick={()=> removeScalingConfig(scaling.id)}
                                     className="text-red-600 hover:text-red-800 p-1"
                                     title="Remove scaling"
                                   >
@@ -935,44 +935,43 @@ function DeviceModal({ isOpen, onClose, device }) {
                                   Quick Presets
                                 </label>
                                 <select
-                                  onChange={(e) => {
-                                    const preset = SCALING_PRESETS.find(p => p.name === e.target.value);
-                                    if (preset) applyScalingPreset(scaling.id, preset);
+                                  onChange={(e)=> {
+                                    const preset=SCALING_PRESETS.find(p=> p.name===e.target.value);
+                                    if (preset) applyScalingPreset(scaling.id,preset);
                                   }}
                                   className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                                   defaultValue=""
                                 >
                                   <option value="">Select preset...</option>
-                                  {SCALING_PRESETS.map(preset => (
+                                  {SCALING_PRESETS.map(preset=> (
                                     <option key={preset.name} value={preset.name}>
                                       {preset.name}
                                     </option>
                                   ))}
                                 </select>
                               </div>
-
                               <div className="bg-white border border-gray-200 rounded p-3">
                                 <div className="text-xs font-medium text-gray-700 mb-2">Formula & Preview</div>
                                 <div className="text-xs text-gray-600 mb-2">
-                                  Scaled = (Raw × {scaling.multiplier}) + {scaling.offset}
+                                  Scaled=(Raw × {scaling.multiplier}) + {scaling.offset}
                                 </div>
                                 <div className="space-y-1 text-xs">
                                   <div className="flex justify-between">
                                     <span className="text-gray-600">Raw: 1000</span>
                                     <span className="font-medium">
-                                      → {calculateScaledValue(1000, scaling)} {scaling.unit}
+                                      → {calculateScaledValue(1000,scaling)} {scaling.unit}
                                     </span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-gray-600">Raw: 2500</span>
                                     <span className="font-medium">
-                                      → {calculateScaledValue(2500, scaling)} {scaling.unit}
+                                      → {calculateScaledValue(2500,scaling)} {scaling.unit}
                                     </span>
                                   </div>
                                   <div className="flex justify-between">
                                     <span className="text-gray-600">Raw: 5000</span>
                                     <span className="font-medium">
-                                      → {calculateScaledValue(5000, scaling)} {scaling.unit}
+                                      → {calculateScaledValue(5000,scaling)} {scaling.unit}
                                     </span>
                                   </div>
                                 </div>
@@ -988,9 +987,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                 {/* Advanced Settings */}
                 {showModbusHelper && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{opacity: 0,height: 0}}
+                    animate={{opacity: 1,height: 'auto'}}
+                    exit={{opacity: 0,height: 0}}
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -1000,7 +999,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         <input
                           type="number"
                           value={formData.modbusConfig.timeout}
-                          onChange={(e) => handleModbusConfigChange('timeout', parseInt(e.target.value))}
+                          onChange={(e)=> handleModbusConfigChange('timeout',parseInt(e.target.value))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </div>
@@ -1011,7 +1010,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         <input
                           type="number"
                           value={formData.modbusConfig.retries}
-                          onChange={(e) => handleModbusConfigChange('retries', parseInt(e.target.value))}
+                          onChange={(e)=> handleModbusConfigChange('retries',parseInt(e.target.value))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </div>
@@ -1022,7 +1021,7 @@ function DeviceModal({ isOpen, onClose, device }) {
             )}
 
             {/* BACnet-specific Configuration */}
-            {formData.protocol === 'bacnet' && (
+            {formData.protocol==='bacnet' && (
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h4 className="text-lg font-semibold text-gray-900">BACnet Configuration</h4>
@@ -1030,9 +1029,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                     {formData.host && formData.port && (
                       <motion.button
                         type="button"
-                        whileHover={{ scale: 1.05 }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setShowBACnetObjectBrowser(true)}
+                        whileHover={{scale: 1.05}}
+                        whileTap={{scale: 0.95}}
+                        onClick={()=> setShowBACnetObjectBrowser(true)}
                         className="bg-blue-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-blue-700 transition-colors text-sm font-medium"
                       >
                         <SafeIcon icon={FiEye} className="w-4 h-4" />
@@ -1041,9 +1040,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                     )}
                     <motion.button
                       type="button"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      onClick={() => setShowBACnetHelper(!showBACnetHelper)}
+                      whileHover={{scale: 1.05}}
+                      whileTap={{scale: 0.95}}
+                      onClick={()=> setShowBACnetHelper(!showBACnetHelper)}
                       className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-blue-200 transition-colors text-sm"
                     >
                       <SafeIcon icon={FiSettings} className="w-4 h-4" />
@@ -1060,8 +1059,8 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </label>
                     <motion.button
                       type="button"
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
+                      whileHover={{scale: 1.05}}
+                      whileTap={{scale: 0.95}}
                       onClick={addBACnetObjectInstance}
                       className="bg-primary-600 text-white px-3 py-1 rounded-lg flex items-center space-x-2 hover:bg-primary-700 transition-colors text-sm"
                     >
@@ -1070,7 +1069,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </motion.button>
                   </div>
 
-                  {formData.bacnetConfig.objectInstances.length === 0 ? (
+                  {formData.bacnetConfig.objectInstances.length===0 ? (
                     <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
                       <SafeIcon icon={FiSettings} className="w-8 h-8 mx-auto mb-2 text-gray-400" />
                       <p className="text-gray-600 mb-2">No BACnet objects configured</p>
@@ -1078,7 +1077,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                     </div>
                   ) : (
                     <div className="space-y-3">
-                      {formData.bacnetConfig.objectInstances.map((obj) => (
+                      {formData.bacnetConfig.objectInstances.map((obj)=> (
                         <div key={obj.id} className="border border-gray-200 rounded-lg p-4">
                           <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
                             <div>
@@ -1087,10 +1086,10 @@ function DeviceModal({ isOpen, onClose, device }) {
                               </label>
                               <select
                                 value={obj.objectType}
-                                onChange={(e) => updateBACnetObjectInstance(obj.id, 'objectType', e.target.value)}
+                                onChange={(e)=> updateBACnetObjectInstance(obj.id,'objectType',e.target.value)}
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                               >
-                                {BACNET_OBJECT_TYPES.map(type => (
+                                {BACNET_OBJECT_TYPES.map(type=> (
                                   <option key={type.value} value={type.value}>
                                     {type.label}
                                   </option>
@@ -1104,7 +1103,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                               <input
                                 type="number"
                                 value={obj.instance}
-                                onChange={(e) => updateBACnetObjectInstance(obj.id, 'instance', parseInt(e.target.value))}
+                                onChange={(e)=> updateBACnetObjectInstance(obj.id,'instance',parseInt(e.target.value))}
                                 min="0"
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                               />
@@ -1116,7 +1115,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                               <input
                                 type="text"
                                 value={obj.name}
-                                onChange={(e) => updateBACnetObjectInstance(obj.id, 'name', e.target.value)}
+                                onChange={(e)=> updateBACnetObjectInstance(obj.id,'name',e.target.value)}
                                 placeholder="Object name"
                                 className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-primary-500"
                               />
@@ -1135,9 +1134,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                             <div className="flex items-end">
                               <motion.button
                                 type="button"
-                                whileHover={{ scale: 1.05 }}
-                                whileTap={{ scale: 0.95 }}
-                                onClick={() => removeBACnetObjectInstance(obj.id)}
+                                whileHover={{scale: 1.05}}
+                                whileTap={{scale: 0.95}}
+                                onClick={()=> removeBACnetObjectInstance(obj.id)}
                                 className="text-red-600 hover:text-red-800 p-1"
                                 title="Remove object"
                               >
@@ -1149,7 +1148,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                             <input
                               type="text"
                               value={obj.description}
-                              onChange={(e) => updateBACnetObjectInstance(obj.id, 'description', e.target.value)}
+                              onChange={(e)=> updateBACnetObjectInstance(obj.id,'description',e.target.value)}
                               placeholder="Optional description"
                               className="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
                             />
@@ -1163,9 +1162,9 @@ function DeviceModal({ isOpen, onClose, device }) {
                 {/* Advanced BACnet Settings */}
                 {showBACnetHelper && (
                   <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: 'auto' }}
-                    exit={{ opacity: 0, height: 0 }}
+                    initial={{opacity: 0,height: 0}}
+                    animate={{opacity: 1,height: 'auto'}}
+                    exit={{opacity: 0,height: 0}}
                   >
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <div>
@@ -1175,7 +1174,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         <input
                           type="number"
                           value={formData.bacnetConfig.networkNumber}
-                          onChange={(e) => handleBACnetConfigChange('networkNumber', parseInt(e.target.value))}
+                          onChange={(e)=> handleBACnetConfigChange('networkNumber',parseInt(e.target.value))}
                           min="0"
                           max="65535"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
@@ -1188,8 +1187,8 @@ function DeviceModal({ isOpen, onClose, device }) {
                         <input
                           type="text"
                           value={formData.bacnetConfig.macAddress}
-                          onChange={(e) => handleBACnetConfigChange('macAddress', e.target.value)}
-                          placeholder="e.g., 10:20:30:40:50:60"
+                          onChange={(e)=> handleBACnetConfigChange('macAddress',e.target.value)}
+                          placeholder="e.g.,10:20:30:40:50:60"
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         />
                       </div>
@@ -1199,7 +1198,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         </label>
                         <select
                           value={formData.bacnetConfig.maxApduLength}
-                          onChange={(e) => handleBACnetConfigChange('maxApduLength', parseInt(e.target.value))}
+                          onChange={(e)=> handleBACnetConfigChange('maxApduLength',parseInt(e.target.value))}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                           <option value={50}>50 bytes</option>
@@ -1216,7 +1215,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         </label>
                         <select
                           value={formData.bacnetConfig.segmentationSupported}
-                          onChange={(e) => handleBACnetConfigChange('segmentationSupported', e.target.value)}
+                          onChange={(e)=> handleBACnetConfigChange('segmentationSupported',e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         >
                           <option value="segmented-both">Both</option>
@@ -1235,7 +1234,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         <input
                           type="text"
                           value={formData.bacnetConfig.vendorId}
-                          onChange={(e) => handleBACnetConfigChange('vendorId', e.target.value)}
+                          onChange={(e)=> handleBACnetConfigChange('vendorId',e.target.value)}
                           className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                           readOnly
                         />
@@ -1250,7 +1249,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                         </label>
                         <div className="max-h-32 overflow-y-auto border border-gray-300 rounded-md p-3 bg-gray-50">
                           <div className="space-y-1">
-                            {formData.bacnetConfig.objectList.map((obj, index) => (
+                            {formData.bacnetConfig.objectList.map((obj,index)=> (
                               <div key={index} className="text-sm flex items-center justify-between">
                                 <span className="font-medium">{obj.objectName || obj.name}</span>
                                 <span className="text-gray-500">
@@ -1268,28 +1267,24 @@ function DeviceModal({ isOpen, onClose, device }) {
             )}
 
             {/* Non-BACnet Configuration */}
-            {formData.protocol !== 'bacnet' && formData.protocol !== 'modbus' && (
+            {formData.protocol !=='bacnet' && formData.protocol !=='modbus' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {formData.protocol === 'snmp' ? 'OIDs' : 'Object IDs'} (comma-separated)
+                  {formData.protocol==='snmp' ? 'OIDs' : 'Object IDs'} (comma-separated)
                 </label>
                 <input
                   type="text"
                   name="registers"
                   value={formData.registers}
                   onChange={handleChange}
-                  placeholder={
-                    formData.protocol === 'snmp' 
-                      ? 'e.g., 1.3.6.1.2.1.1.1.0,1.3.6.1.2.1.1.3.0'
-                      : 'e.g., 40001,40002,40003,40004,40005'
-                  }
+                  placeholder={formData.protocol==='snmp' ? 'e.g.,1.3.6.1.2.1.1.1.0,1.3.6.1.2.1.1.3.0' : 'e.g.,40001,40002,40003,40004,40005'}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
             )}
 
             {/* Legacy Modbus Registers (if no functions configured) */}
-            {formData.protocol === 'modbus' && formData.modbusConfig.functions.length === 0 && (
+            {formData.protocol==='modbus' && formData.modbusConfig.functions.length===0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Modbus Registers (comma-separated)
@@ -1299,7 +1294,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                   name="registers"
                   value={formData.registers}
                   onChange={handleChange}
-                  placeholder="e.g., 40001,40002,40003,40004,40005"
+                  placeholder="e.g.,40001,40002,40003,40004,40005"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
@@ -1309,7 +1304,7 @@ function DeviceModal({ isOpen, onClose, device }) {
             )}
 
             {/* Legacy BACnet Object IDs (if no object instances configured) */}
-            {formData.protocol === 'bacnet' && formData.bacnetConfig.objectInstances.length === 0 && (
+            {formData.protocol==='bacnet' && formData.bacnetConfig.objectInstances.length===0 && (
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -1318,7 +1313,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                   {formData.host && formData.port && (
                     <button
                       type="button"
-                      onClick={() => setShowBACnetObjectBrowser(true)}
+                      onClick={()=> setShowBACnetObjectBrowser(true)}
                       className="text-sm text-blue-600 hover:text-blue-800 flex items-center space-x-1"
                     >
                       <SafeIcon icon={FiEye} className="w-4 h-4" />
@@ -1331,11 +1326,11 @@ function DeviceModal({ isOpen, onClose, device }) {
                   name="registers"
                   value={formData.registers}
                   onChange={handleChange}
-                  placeholder="e.g., analog-input:0,analog-input:1,binary-input:0"
+                  placeholder="e.g.,analog-input:0,analog-input:1,binary-input:0"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Use "Add Object" button above for better configuration with object types, or browse objects to auto-configure.
+                  Use "Add Object" button above for better configuration with object types,or browse objects to auto-configure.
                 </p>
               </div>
             )}
@@ -1351,7 +1346,7 @@ function DeviceModal({ isOpen, onClose, device }) {
                   name="mqttTopic"
                   value={formData.mqttTopic}
                   onChange={handleChange}
-                  placeholder="e.g., devices/sensor1"
+                  placeholder="e.g.,devices/sensor1"
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 />
               </div>
@@ -1380,8 +1375,8 @@ function DeviceModal({ isOpen, onClose, device }) {
                 Cancel
               </button>
               <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{scale: 1.05}}
+                whileTap={{scale: 0.95}}
                 type="submit"
                 className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 transition-colors flex items-center space-x-2"
               >
@@ -1393,28 +1388,35 @@ function DeviceModal({ isOpen, onClose, device }) {
         </motion.div>
       </motion.div>
 
-      {/* Device Templates Modal */}
-      <DeviceTemplates
-        isOpen={showTemplates}
-        onClose={() => setShowTemplates(false)}
-        onSelectTemplate={handleTemplateSelect}
-      />
+      {/* Separate Modal Components - Each needs unique keys */}
+      {showTemplates && (
+        <DeviceTemplates
+          key="device-templates-modal"
+          isOpen={showTemplates}
+          onClose={()=> setShowTemplates(false)}
+          onSelectTemplate={handleTemplateSelect}
+        />
+      )}
 
-      {/* BACnet Discovery Modal */}
-      <BACnetDiscovery
-        isOpen={showBACnetDiscovery}
-        onClose={() => setShowBACnetDiscovery(false)}
-        onDeviceSelect={handleBACnetDeviceSelect}
-      />
+      {showBACnetDiscovery && (
+        <BACnetDiscovery
+          key="bacnet-discovery-modal"
+          isOpen={showBACnetDiscovery}
+          onClose={()=> setShowBACnetDiscovery(false)}
+          onDeviceSelect={handleBACnetDeviceSelect}
+        />
+      )}
 
-      {/* BACnet Object Browser Modal */}
-      <BACnetObjectBrowser
-        isOpen={showBACnetObjectBrowser}
-        onClose={() => setShowBACnetObjectBrowser(false)}
-        device={formData}
-        onObjectsSelect={handleBACnetObjectsSelect}
-      />
-    </AnimatePresence>
+      {showBACnetObjectBrowser && (
+        <BACnetObjectBrowser
+          key="bacnet-object-browser-modal"
+          isOpen={showBACnetObjectBrowser}
+          onClose={()=> setShowBACnetObjectBrowser(false)}
+          device={formData}
+          onObjectsSelect={handleBACnetObjectsSelect}
+        />
+      )}
+    </>
   );
 }
 
