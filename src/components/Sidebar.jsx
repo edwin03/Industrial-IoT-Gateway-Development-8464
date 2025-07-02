@@ -5,7 +5,7 @@ import * as FiIcons from 'react-icons/fi';
 import SafeIcon from '../common/SafeIcon';
 import { useAuth } from '../context/AuthContext';
 
-const { FiHome, FiHardDrive, FiSettings, FiFileText, FiActivity, FiDatabase, FiAlertTriangle, FiClock, FiUsers, FiUser, FiLogOut } = FiIcons;
+const { FiHome, FiHardDrive, FiSettings, FiFileText, FiActivity, FiDatabase, FiAlertTriangle, FiClock, FiUsers, FiUser, FiLogOut, FiBrain } = FiIcons;
 
 function Sidebar() {
   const { user, hasPermission, logout } = useAuth();
@@ -14,6 +14,7 @@ function Sidebar() {
     { path: '/', icon: FiHome, label: 'Dashboard', permission: null },
     { path: '/devices', icon: FiHardDrive, label: 'Devices', permission: 'devices:read' },
     { path: '/data', icon: FiDatabase, label: 'Data Monitor', permission: 'data:read' },
+    { path: '/analytics', icon: FiBrain, label: 'Analytics', permission: 'data:read' },
     { path: '/history', icon: FiClock, label: 'Data History', permission: 'history:read' },
     { path: '/alarms', icon: FiAlertTriangle, label: 'Alarms', permission: 'alarms:read' },
     { path: '/users', icon: FiUsers, label: 'Users', permission: 'users:read' },
@@ -46,9 +47,7 @@ function Sidebar() {
               to={item.path}
               className={({ isActive }) =>
                 `flex items-center px-4 py-3 mx-2 text-gray-700 rounded-lg hover:bg-primary-50 hover:text-primary-700 transition-colors ${
-                  isActive
-                    ? 'bg-primary-50 text-primary-700 border-r-2 border-primary-600'
-                    : ''
+                  isActive ? 'bg-primary-50 text-primary-700 border-r-2 border-primary-600' : ''
                 }`
               }
             >
@@ -72,7 +71,6 @@ function Sidebar() {
             <p className="text-xs text-gray-500 truncate">{user?.role}</p>
           </div>
         </div>
-        
         <div className="space-y-1">
           <NavLink
             to="/profile"

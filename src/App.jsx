@@ -12,6 +12,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import Dashboard from './pages/Dashboard';
 import Devices from './pages/Devices';
 import Data from './pages/Data';
+import Analytics from './pages/Analytics';
 import DataHistory from './pages/DataHistory';
 import Alarms from './pages/Alarms';
 import Settings from './pages/Settings';
@@ -47,7 +48,6 @@ function AppContent() {
       });
 
       setSocket(newSocket);
-      
       // Make socket available globally for components that need it
       window.socketInstance = newSocket;
 
@@ -108,62 +108,46 @@ function AppContent() {
                 <AnimatePresence mode="wait">
                   <Routes>
                     <Route path="/" element={<Dashboard />} />
-                    <Route 
-                      path="/devices" 
-                      element={
-                        <ProtectedRoute permission="devices:read">
-                          <Devices />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/data" 
-                      element={
-                        <ProtectedRoute permission="data:read">
-                          <Data />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/history" 
-                      element={
-                        <ProtectedRoute permission="history:read">
-                          <DataHistory />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/alarms" 
-                      element={
-                        <ProtectedRoute permission="alarms:read">
-                          <Alarms />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/users" 
-                      element={
-                        <ProtectedRoute permission="users:read">
-                          <Users />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/settings" 
-                      element={
-                        <ProtectedRoute permission="settings:read">
-                          <Settings />
-                        </ProtectedRoute>
-                      } 
-                    />
-                    <Route 
-                      path="/logs" 
-                      element={
-                        <ProtectedRoute permission="logs:read">
-                          <Logs />
-                        </ProtectedRoute>
-                      } 
-                    />
+                    <Route path="/devices" element={
+                      <ProtectedRoute permission="devices:read">
+                        <Devices />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/data" element={
+                      <ProtectedRoute permission="data:read">
+                        <Data />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/analytics" element={
+                      <ProtectedRoute permission="data:read">
+                        <Analytics />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/history" element={
+                      <ProtectedRoute permission="history:read">
+                        <DataHistory />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/alarms" element={
+                      <ProtectedRoute permission="alarms:read">
+                        <Alarms />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/users" element={
+                      <ProtectedRoute permission="users:read">
+                        <Users />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/settings" element={
+                      <ProtectedRoute permission="settings:read">
+                        <Settings />
+                      </ProtectedRoute>
+                    } />
+                    <Route path="/logs" element={
+                      <ProtectedRoute permission="logs:read">
+                        <Logs />
+                      </ProtectedRoute>
+                    } />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
