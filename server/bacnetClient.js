@@ -61,7 +61,7 @@ class BACnetClient {
 
       // Limit results and enhance with object discovery if requested
       const limitedDevices = discoveredDevices.slice(0, maxDevices);
-      
+
       if (includeObjects && limitedDevices.length > 0) {
         this.log('info', `Reading object lists for ${limitedDevices.length} devices...`);
         for (const device of limitedDevices) {
@@ -81,7 +81,6 @@ class BACnetClient {
 
       this.log('success', `BACnet discovery completed: ${limitedDevices.length} devices found`);
       return limitedDevices;
-
     } catch (error) {
       this.log('error', `BACnet discovery failed: ${error.message}`);
       return []; // Return empty array instead of throwing
@@ -123,7 +122,6 @@ class BACnetClient {
       // Method 3: Fallback to default object list with enhanced simulation
       this.log('info', 'Using simulated object list for demonstration');
       return this.getEnhancedObjectList(deviceId);
-
     } catch (error) {
       this.log('error', `Failed to read object list: ${error.message}`);
       throw error;
@@ -137,7 +135,6 @@ class BACnetClient {
       const { stdout } = await execAsync(`timeout ${Math.floor(timeout / 1000)} bacepics ${address} ${deviceId}`, {
         timeout: timeout + 1000
       });
-      
       return this.parseObjectListOutput(stdout);
     } catch (error) {
       throw new Error('BACnet utilities not available or failed');
@@ -151,7 +148,7 @@ class BACnetClient {
       // For now, we'll simulate based on device characteristics
       const dgram = await import('dgram');
       const socket = dgram.createSocket('udp4');
-      
+
       return new Promise((resolve, reject) => {
         const timeoutId = setTimeout(() => {
           socket.close();
@@ -160,7 +157,7 @@ class BACnetClient {
 
         // Simulate BACnet Read Property Multiple request
         const readPropertyPacket = this.createReadPropertyPacket(deviceId, 8, 'object-list');
-        
+
         socket.on('error', (err) => {
           clearTimeout(timeoutId);
           socket.close();
@@ -171,7 +168,6 @@ class BACnetClient {
           try {
             clearTimeout(timeoutId);
             socket.close();
-            
             // Parse response (simplified - in production use proper BACnet library)
             const objectList = this.parseObjectListResponse(msg);
             resolve(objectList);
@@ -224,7 +220,7 @@ class BACnetClient {
   parseObjectListOutput(output) {
     const objects = [];
     const lines = output.split('\n');
-    
+
     for (const line of lines) {
       // Parse different formats of BACnet tool outputs
       if (line.includes('Object:') || line.includes('AI') || line.includes('AO') || line.includes('BI') || line.includes('BO')) {
@@ -238,7 +234,7 @@ class BACnetClient {
         }
       }
     }
-    
+
     return objects.length > 0 ? objects : this.getEnhancedObjectList();
   }
 
@@ -256,7 +252,6 @@ class BACnetClient {
       if (match) {
         const [, typeStr, instance, name] = match;
         const objectType = this.normalizeObjectType(typeStr);
-        
         return {
           objectType: objectType,
           instance: parseInt(instance),
@@ -268,7 +263,7 @@ class BACnetClient {
         };
       }
     }
-    
+
     return null;
   }
 
@@ -287,7 +282,6 @@ class BACnetClient {
       'DEV': 'device',
       'DEVICE': 'device'
     };
-    
     return typeMap[typeStr.toUpperCase()] || typeStr.toLowerCase().replace(/[^a-z]/g, '-');
   }
 
@@ -304,7 +298,6 @@ class BACnetClient {
       'multi-state-output': 'no-units',
       'multi-state-value': 'no-units'
     };
-    
     return unitMap[objectType] || 'no-units';
   }
 
@@ -494,11 +487,9 @@ class BACnetClient {
   // Adjust values based on device ID for variation
   adjustValueForDevice(baseValue, objectType, deviceNum) {
     const variation = (deviceNum % 5) * 0.1; // 0-40% variation
-    
     if (typeof baseValue === 'number' && objectType.includes('analog')) {
       return parseFloat((baseValue * (1 + variation)).toFixed(2));
     }
-    
     return baseValue;
   }
 
@@ -549,7 +540,6 @@ class BACnetClient {
 
         socket.bind(() => {
           socket.setBroadcast(true);
-          
           // Send WHO-IS broadcast
           const whoIsPacket = this.createWhoIsPacket();
           const broadcastAddress = networkRange === 'local' ? '255.255.255.255' : this.getBroadcastAddress(networkRange);
@@ -572,11 +562,11 @@ class BACnetClient {
   async discoverWithNetworkScan(networkRange, timeout) {
     const devices = [];
     const networkBase = this.getNetworkBase(networkRange);
-    
+
     // Scan common BACnet addresses (limited scan for demo)
     const testAddresses = ['100', '101', '102', '110', '111', '120', '200', '201'];
     const scanPromises = [];
-    
+
     for (const addr of testAddresses) {
       const ip = `${networkBase}.${addr}`;
       scanPromises.push(this.probeBacnetDevice(ip, 47808, 2000));
@@ -596,7 +586,6 @@ class BACnetClient {
   async probeBacnetDevice(ip, port, timeout) {
     try {
       const net = await import('net');
-      
       return new Promise((resolve) => {
         const socket = new net.Socket();
         const timer = setTimeout(() => {
@@ -678,6 +667,7 @@ class BACnetClient {
           objectList: this.getDefaultObjectList()
         };
       }
+
       return null;
     } catch (error) {
       return null;
@@ -688,7 +678,7 @@ class BACnetClient {
   parseBacnetUtilsOutput(output) {
     const devices = [];
     const lines = output.split('\n');
-    
+
     for (const line of lines) {
       if (line.includes('Device') && line.includes('Instance')) {
         try {
@@ -717,6 +707,7 @@ class BACnetClient {
         }
       }
     }
+
     return devices;
   }
 
@@ -726,7 +717,6 @@ class BACnetClient {
       // Try to detect local network
       return '192.168.1'; // Default fallback
     }
-    
     // Parse custom network range (e.g., "192.168.1.0/24")
     const [network] = networkRange.split('/');
     const parts = network.split('.');
@@ -738,7 +728,6 @@ class BACnetClient {
     if (networkRange === 'broadcast') {
       return '255.255.255.255';
     }
-    
     const networkBase = this.getNetworkBase(networkRange);
     return `${networkBase}.255`;
   }
@@ -791,67 +780,148 @@ class BACnetClient {
     return this.getDefaultObjectList();
   }
 
-  // Read BACnet device data - FIXED: Restore original simple functionality
+  // Read BACnet device data - Enhanced to support object types
   async readDevice(deviceConfig) {
     const deviceId = deviceConfig.deviceId;
-    
     try {
-      // Simple simulation of BACnet data reading
-      // In a real implementation, this would use a proper BACnet library
+      // Enhanced simulation of BACnet data reading with object type support
       const data = {};
+
+      // Parse registers to get object type and instance information
+      const objectSpecs = this.parseObjectSpecs(deviceConfig.registers);
       
-      // Get registers/object instances from device config
-      const objectIds = deviceConfig.registers ? 
-        deviceConfig.registers.split(',').map(r => r.trim()) : 
-        ['0', '1', '2', '3', '4'];
-      
-      // Generate simulated data for each object
-      objectIds.forEach((objectId, index) => {
-        let value;
-        const objNum = parseInt(objectId) || index;
+      // Generate data for each object specification
+      objectSpecs.forEach((spec, index) => {
+        const { objectType, instance } = spec;
+        const value = this.generateValueForObjectType(objectType, instance);
         
-        // Generate different types of realistic data
-        switch (objNum % 5) {
-          case 0: // Temperature
-            value = 20 + Math.random() * 10; // 20-30°C
-            data[`temperature_${objectId}`] = parseFloat(value.toFixed(2));
-            break;
-          case 1: // Humidity
-            value = 40 + Math.random() * 20; // 40-60%
-            data[`humidity_${objectId}`] = parseFloat(value.toFixed(2));
-            break;
-          case 2: // Pressure
-            value = 1000 + Math.random() * 50; // 1000-1050 hPa
-            data[`pressure_${objectId}`] = parseFloat(value.toFixed(2));
-            break;
-          case 3: // Binary status
-            value = Math.random() > 0.5 ? 1 : 0;
-            data[`status_${objectId}`] = value;
-            break;
-          case 4: // Flow rate
-            value = Math.random() * 100; // 0-100 L/min
-            data[`flow_${objectId}`] = parseFloat(value.toFixed(2));
-            break;
-          default:
-            value = Math.random() * 100;
-            data[`object_${objectId}`] = parseFloat(value.toFixed(2));
-        }
+        // Create descriptive key based on object type and instance
+        const key = `${objectType}_${instance}`;
+        data[key] = value;
+        
+        // Also add metadata
+        data[`${key}_type`] = objectType;
+        data[`${key}_instance`] = instance;
+        data[`${key}_units`] = this.getDefaultUnits(objectType);
       });
 
-      // Add some common BACnet objects if using default config
-      if (!deviceConfig.registers || deviceConfig.registers === '0,1,2,3,4') {
-        data.present_value = parseFloat((Math.random() * 100).toFixed(2));
-        data.status_flags = Math.random() > 0.9 ? 1 : 0;
-        data.reliability = 'no-fault-detected';
-        data.out_of_service = false;
+      // If no object specs found, fall back to legacy behavior
+      if (objectSpecs.length === 0) {
+        const objectIds = deviceConfig.registers ? 
+          deviceConfig.registers.split(',').map(r => r.trim()) : 
+          ['0', '1', '2', '3', '4'];
+
+        // Generate simulated data for each object
+        objectIds.forEach((objectId, index) => {
+          let value;
+          const objNum = parseInt(objectId) || index;
+
+          // Generate different types of realistic data
+          switch (objNum % 5) {
+            case 0: // Temperature
+              value = 20 + Math.random() * 10; // 20-30°C
+              data[`temperature_${objectId}`] = parseFloat(value.toFixed(2));
+              break;
+            case 1: // Humidity
+              value = 40 + Math.random() * 20; // 40-60%
+              data[`humidity_${objectId}`] = parseFloat(value.toFixed(2));
+              break;
+            case 2: // Pressure
+              value = 1000 + Math.random() * 50; // 1000-1050 hPa
+              data[`pressure_${objectId}`] = parseFloat(value.toFixed(2));
+              break;
+            case 3: // Binary status
+              value = Math.random() > 0.5 ? 1 : 0;
+              data[`status_${objectId}`] = value;
+              break;
+            case 4: // Flow rate
+              value = Math.random() * 100; // 0-100 L/min
+              data[`flow_${objectId}`] = parseFloat(value.toFixed(2));
+              break;
+            default:
+              value = Math.random() * 100;
+              data[`object_${objectId}`] = parseFloat(value.toFixed(2));
+          }
+        });
+
+        // Add some common BACnet objects if using default config
+        if (!deviceConfig.registers || deviceConfig.registers === '0,1,2,3,4') {
+          data.present_value = parseFloat((Math.random() * 100).toFixed(2));
+          data.status_flags = Math.random() > 0.9 ? 1 : 0;
+          data.reliability = 'no-fault-detected';
+          data.out_of_service = false;
+        }
       }
 
       this.log('info', `Successfully read BACnet device ${deviceId}: ${Object.keys(data).length} values`);
       return data;
-
     } catch (error) {
       this.log('error', `Failed to read BACnet device ${deviceId}: ${error.message}`);
       throw error;
+    }
+  }
+
+  // Parse object specifications from registers string
+  parseObjectSpecs(registers) {
+    if (!registers) return [];
+    
+    const specs = [];
+    const parts = registers.split(',');
+    
+    parts.forEach(part => {
+      const trimmed = part.trim();
+      if (trimmed.includes(':')) {
+        // New format: "object-type:instance"
+        const [objectType, instance] = trimmed.split(':');
+        if (objectType && instance !== undefined) {
+          specs.push({
+            objectType: objectType.trim(),
+            instance: parseInt(instance.trim()) || 0
+          });
+        }
+      } else {
+        // Legacy format: just instance numbers, assume analog-input
+        const instance = parseInt(trimmed);
+        if (!isNaN(instance)) {
+          specs.push({
+            objectType: 'analog-input',
+            instance: instance
+          });
+        }
+      }
+    });
+    
+    return specs;
+  }
+
+  // Generate realistic values based on object type
+  generateValueForObjectType(objectType, instance) {
+    switch (objectType) {
+      case 'analog-input':
+      case 'analog-output':
+      case 'analog-value':
+        // Generate different analog values based on instance
+        switch (instance % 5) {
+          case 0: return parseFloat((20 + Math.random() * 10).toFixed(2)); // Temperature
+          case 1: return parseFloat((40 + Math.random() * 20).toFixed(2)); // Humidity
+          case 2: return parseFloat((1000 + Math.random() * 50).toFixed(2)); // Pressure
+          case 3: return parseFloat((Math.random() * 100).toFixed(2)); // Flow
+          case 4: return parseFloat((200 + Math.random() * 50).toFixed(1)); // Voltage
+          default: return parseFloat((Math.random() * 100).toFixed(2));
+        }
+        
+      case 'binary-input':
+      case 'binary-output':
+      case 'binary-value':
+        return Math.random() > 0.5 ? 1 : 0;
+        
+      case 'multi-state-input':
+      case 'multi-state-output':
+      case 'multi-state-value':
+        return Math.floor(Math.random() * 4); // 0-3 states
+        
+      default:
+        return parseFloat((Math.random() * 100).toFixed(2));
     }
   }
 
